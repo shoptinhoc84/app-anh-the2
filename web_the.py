@@ -13,7 +13,7 @@ st.set_page_config(page_title="Studio Ảnh Thẻ Pro Max", layout="wide")
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - Pro Max (Có nút Reset)")
+st.title("📸 Studio Ảnh Thẻ - Pro Max (STH)")
 st.markdown("---")
 
 # --- 2. HÀM RESET (MỚI) ---
@@ -305,3 +305,4 @@ with col2:
             
     else:
         st.info("👈 Tải ảnh lên để bắt đầu.")
+
