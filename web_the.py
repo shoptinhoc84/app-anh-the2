@@ -228,3 +228,4 @@ with col2:
             
     else:
         st.info("👈 Vui lòng tải ảnh lên và đọc kỹ quy định bên trái.")
+
