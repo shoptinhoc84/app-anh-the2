@@ -49,7 +49,7 @@ def process_input_image(uploaded_file, target_ratio=4/6):
         if target_ratio < 0.7: 
             # === CẤU HÌNH CHO 4x6 (HỘ CHIẾU) ===
             # Yêu cầu: Mặt chiếm ~78% ảnh -> Zoom sát hơn nữa
-            zoom_factor = 1.50  # Giảm số này xuống để mặt to hơn (Cũ là 1.6)
+            zoom_factor = 1.58  # Giảm số này xuống để mặt to hơn (Cũ là 1.6)
             top_offset = 0.20   # Đẩy khung lên cao để không bị mất đỉnh đầu
         else:
             # === CẤU HÌNH CHO 3x4 (GIẤY TỜ) ===
@@ -195,5 +195,6 @@ with col2:
             
     else:
         st.info("👈 Vui lòng tải ảnh lên ở cột bên trái.")
+
 
 
