@@ -13,35 +13,36 @@ st.set_page_config(page_title="Studio Ảnh Thẻ Pro Max", layout="wide")
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - Pro Max (Bản Ổn Định)")
+st.title("📸 Studio Ảnh Thẻ - Pro Max (Có nút Reset)")
 st.markdown("---")
 
-# --- 2. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
+# --- 2. HÀM RESET (MỚI) ---
+def reset_beauty_params():
+    """Đưa toàn bộ thông số làm đẹp về mặc định"""
+    st.session_state.val_smooth = 0
+    st.session_state.val_makeup = 0
+    st.session_state.val_exposure = 1.0
+    st.session_state.val_contrast = 1.0
+    st.session_state.val_temp = 0
+    st.session_state.val_sharp = 0
+    st.session_state.val_dehaze = 0
+
+# --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI (GIỮ NGUYÊN BẢN ỔN ĐỊNH) ---
 
 def rotate_image(image, angle):
-    """
-    Xoay ảnh an toàn, giữ nguyên khung hình
-    """
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    # Dùng border trong suốt để không bị viền đen
     rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0,0))
     return rotated
 
 def get_face_angle(gray_img, face_rect):
-    """
-    Tính góc nghiêng: Code cũ (Ổn định hơn)
-    """
     (x, y, w, h) = face_rect
     roi_gray = gray_img[y:y+h, x:x+w]
-    
-    # Tăng minNeighbors lên 5 để chỉ bắt mắt thật rõ, tránh bắt nhầm mũi/miệng
     eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
     eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
     
     if len(eyes) >= 2:
-        # Sắp xếp mắt trái -> phải
         eyes = sorted(eyes, key=lambda e: e[0])
         (ex1, ey1, ew1, eh1) = eyes[0]
         (ex2, ey2, ew2, eh2) = eyes[-1]
@@ -52,9 +53,7 @@ def get_face_angle(gray_img, face_rect):
         delta_x = p2[0] - p1[0]
         delta_y = p2[1] - p1[1]
         
-        # Nếu 2 mắt quá gần nhau (do bắt nhầm), bỏ qua
         if delta_x < w/4: return 0.0
-            
         angle = np.degrees(np.arctan2(delta_y, delta_x))
         return angle
     return 0.0
@@ -63,15 +62,12 @@ def process_raw_to_nobg(uploaded_file):
     image = Image.open(uploaded_file)
     session = get_rembg_session()
     no_bg_pil = remove(image, session=session)
-    # Chuyển PIL (RGBA) -> OpenCV (BGRA) chuẩn xác
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
 def crop_final_image(no_bg_img, manual_angle, target_ratio):
     try:
-        # Copy ảnh gốc để không làm hỏng dữ liệu gốc
         img_working = no_bg_img.copy()
-        
         gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         faces = face_cascade.detectMultiScale(gray, 1.1, 5)
@@ -80,15 +76,10 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
             return None, "Không tìm thấy khuôn mặt", 0
 
         face_rect = max(faces, key=lambda f: f[2] * f[3])
-        
-        # --- LOGIC XOAY: Khắt khe hơn để tránh lật ---
         auto_angle = get_face_angle(gray, face_rect)
         
-        # 1. Chỉ xoay Auto nếu góc nghiêng > 1 độ (để tránh rung lắc)
         if abs(auto_angle) < 1.0: auto_angle = 0.0
-        
-        # 2. CHẶN LỖI: Nếu góc quá lớn (> 30 độ) -> Chắc chắn AI sai -> Reset về 0
-        if abs(auto_angle) > 30.0: auto_angle = 0.0
+        if abs(auto_angle) > 30.0: auto_angle = 0.0 # Chặn góc ảo gây lật ảnh
 
         total_angle = auto_angle + manual_angle
         
@@ -97,17 +88,14 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         else:
             img_rotated = img_working
 
-        # Tìm lại mặt sau khi xoay
         gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
         
         if len(faces_new) > 0:
             (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3])
         else:
-            # Nếu xoay xong mất mặt, dùng tọa độ cũ (fallback)
             (x, y, w, h) = face_rect
 
-        # --- CẤU HÌNH CẮT (GIỮ NGUYÊN) ---
         if target_ratio < 0.7: 
             zoom_factor = 2.0  
             top_offset = 0.45   
@@ -122,7 +110,6 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         top_y = int(y - (h * top_offset)) 
         left_x = int(face_center_x - crop_w // 2)
 
-        # Chuyển về PIL để crop an toàn
         img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
@@ -132,12 +119,11 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 3. BỘ LỌC NÂNG CAO & TRANG ĐIỂM ---
+# --- 4. BỘ LỌC NÂNG CAO ---
 
 def adjust_temperature(image, temp):
     if temp == 0: return image
     b, g, r, a = cv2.split(image)
-    # Logic an toàn để không bị tràn số (overflow)
     if temp > 0:
         r = cv2.add(r, temp)
         b = cv2.subtract(b, temp)
@@ -172,7 +158,6 @@ def makeup_vitality(image, intensity):
 def apply_advanced_effects(base_img, params):
     img_cv = cv2.cvtColor(np.array(base_img), cv2.COLOR_RGBA2BGRA)
     
-    # 1. OpenCV Effects
     if params['smooth'] > 0:
         d = 5
         sigma = int(params['smooth'] * 2) + 10
@@ -191,7 +176,6 @@ def apply_advanced_effects(base_img, params):
     if params['makeup'] > 0:
         img_cv = makeup_vitality(img_cv, params['makeup'])
 
-    # 2. PIL Effects
     img_pil = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGRA2RGBA))
     
     if params['sharp'] > 0:
@@ -229,7 +213,7 @@ def create_print_layout(img_person, size_type):
                 count += 1
     return bg_paper, count
 
-# --- 4. GIAO DIỆN CHÍNH ---
+# --- 5. GIAO DIỆN CHÍNH ---
 
 col1, col2 = st.columns([1, 2.2])
 
@@ -254,7 +238,6 @@ with col1:
                 st.session_state.current_file_name = uploaded_file.name
         
         if 'raw_nobg' in st.session_state:
-            # Truyền manual_rot vào để xử lý xoay
             final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
             
             if final_crop:
@@ -264,20 +247,27 @@ with col1:
                 st.error(debug_info)
 
     st.markdown("---")
-    st.subheader("3. Làm đẹp Pro")
+    # --- PHẦN GIAO DIỆN MỚI CÓ NÚT RESET ---
+    c_head, c_btn = st.columns([3, 2])
+    with c_head:
+        st.subheader("3. Làm đẹp Pro")
+    with c_btn:
+        # Nút Reset nằm ngay góc phải tiêu đề
+        st.button("🔄 Mặc định", on_click=reset_beauty_params, help="Quay về ảnh gốc chưa chỉnh sửa")
     
+    # Gán key cho từng slider để hàm reset có thể điều khiển được
     with st.expander("✨ Da & Sức Sống", expanded=True):
-        p_smooth = st.slider("Mịn da", 0, 30, 10)
-        p_makeup = st.slider("Hồng hào (Môi/Má)", 0, 50, 0)
+        p_smooth = st.slider("Mịn da", 0, 30, 0, key="val_smooth")
+        p_makeup = st.slider("Hồng hào (Môi/Má)", 0, 50, 0, key="val_makeup")
 
     with st.expander("💡 Ánh sáng", expanded=False):
-        p_exposure = st.slider("Phơi sáng", 0.5, 1.5, 1.0, 0.05)
-        p_contrast = st.slider("Tương phản", 0.5, 1.5, 1.0, 0.05)
-        p_temp = st.slider("Nhiệt độ màu", -50, 50, 0)
+        p_exposure = st.slider("Phơi sáng", 0.5, 1.5, 1.0, 0.05, key="val_exposure")
+        p_contrast = st.slider("Tương phản", 0.5, 1.5, 1.0, 0.05, key="val_contrast")
+        p_temp = st.slider("Nhiệt độ màu", -50, 50, 0, key="val_temp")
 
     with st.expander("👁️ Chi tiết ảnh", expanded=False):
-        p_sharp = st.slider("Độ nét", 0, 20, 0)
-        p_dehaze = st.slider("Giảm mù/Trong ảnh", 0, 20, 0)
+        p_sharp = st.slider("Độ nét", 0, 20, 0, key="val_sharp")
+        p_dehaze = st.slider("Giảm mù/Trong ảnh", 0, 20, 0, key="val_dehaze")
 
     params = {
         'smooth': p_smooth, 'makeup': p_makeup,
