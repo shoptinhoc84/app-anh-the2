@@ -1,6 +1,7 @@
 streamlit
+rembg
 opencv-python-headless
 Pillow
 numpy<2.0.0
-rembg
 onnxruntime
+watchdog
