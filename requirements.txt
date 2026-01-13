@@ -1,6 +1,7 @@
 streamlit
-rembg
-opencv-python-headless
+rembg[gpu]==2.0.50
+opencv-python-headless==4.8.0.76
 Pillow
-numpy==1.26.4
+numpy==1.24.3
 onnxruntime
+watchdog
