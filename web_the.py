@@ -9,26 +9,25 @@ st.set_page_config(page_title="Studio Ảnh Thẻ Online", layout="wide")
 st.title("📸 Studio Ảnh Thẻ - Web Version")
 st.markdown("---")
 
-# --- 2. CÁC HÀM XỬ LÝ (TỐI ƯU KHỞI ĐỘNG NHANH) ---
+# --- 2. CÁC HÀM XỬ LÝ (GIỮ NGUYÊN TỐI ƯU TỐC ĐỘ) ---
 
 @st.cache_resource
 def get_rembg_session():
-    # MẸO QUAN TRỌNG: Import ở trong này để App mở lên ngay lập tức không bị treo
+    # Import lười để app chạy nhanh
     from rembg import new_session
-    return new_session("u2netp") # Dùng bản 'u2netp' siêu nhẹ (4MB)
+    return new_session("u2netp")
 
 def process_input_image(uploaded_file, target_ratio=4/6):
     try:
         image = Image.open(uploaded_file)
         
         # 1. Tách nền
-        with st.spinner('Đang khởi tạo AI (u2netp) và tách nền...'):
-            # Import ở đây để tránh treo lúc khởi động
+        with st.spinner('Đang xử lý ảnh...'):
             from rembg import remove 
             session = get_rembg_session()
             no_bg = remove(image, session=session)
 
-        # 2. Tìm mặt (OpenCV)
+        # 2. Tìm mặt
         cv_img = cv2.cvtColor(np.array(no_bg.convert("RGB")), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
         
@@ -36,13 +35,12 @@ def process_input_image(uploaded_file, target_ratio=4/6):
         faces = face_cascade.detectMultiScale(gray, 1.1, 5)
 
         if len(faces) == 0:
-            st.error("Không tìm thấy khuôn mặt nào trong ảnh!")
+            st.error("Không tìm thấy khuôn mặt nào!")
             return None, None
 
-        # Lấy mặt lớn nhất
         (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
 
-        # 3. Tính toán Crop
+        # 3. Crop
         crop_h = int(h * 2.5) 
         crop_w = int(crop_h * target_ratio)
         
@@ -105,12 +103,19 @@ with col1:
     st.header("🛠 Thiết lập")
     uploaded_file = st.file_uploader("1. Tải ảnh lên", type=['jpg', 'png', 'jpeg'])
     
-    st.subheader("2. Quy cách")
+    st.subheader("2. Quy cách & Nền")
     size_option = st.radio("Kích thước:", ["4x6 cm", "3x4 cm"])
     target_ratio = 3/4 if "3x4" in size_option else 4/6
     
-    bg_color_name = st.radio("Màu nền:", ["Trắng", "Xanh dương"], horizontal=True)
-    bg_color_val = (66, 135, 245, 255) if bg_color_name == "Xanh dương" else (255, 255, 255, 255)
+    # --- CẬP NHẬT MÀU NỀN MỚI ---
+    bg_color_name = st.radio("Màu nền:", ["Trắng (Siêu sáng)", "Xanh dương (Sáng)", "Xanh dương (Đậm)"], horizontal=True)
+    
+    if "Trắng" in bg_color_name:
+        bg_color_val = (255, 255, 255, 255) # Trắng tuyệt đối
+    elif "Sáng" in bg_color_name:
+        bg_color_val = (135, 206, 250, 255) # Xanh da trời nhạt (Light Sky Blue) -> Rất sáng
+    else:
+        bg_color_val = (66, 135, 245, 255) # Xanh đậm cũ
 
     if uploaded_file:
         current_state_key = f"{uploaded_file.name}_{size_option}"
