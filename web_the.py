@@ -8,7 +8,7 @@ import io
 # --- 1. CẤU HÌNH & CACHE ---
 st.set_page_config(page_title="Studio Ảnh Thẻ Online", layout="wide")
 
-# [QUAN TRỌNG] Dùng model 'u2netp' (bản nhẹ) để tránh bị lỗi hết RAM trên web miễn phí
+# [QUAN TRỌNG] Dùng model 'u2netp' (bản nhẹ) để tránh bị lỗi hết RAM
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
@@ -21,7 +21,6 @@ st.markdown("---")
 def process_input_image(uploaded_file, target_ratio=4/6):
     """
     Xử lý tách nền và crop mặt theo tỷ lệ (3:4 hoặc 4:6)
-    target_ratio: 0.75 (3x4) hoặc 0.666 (4x6)
     """
     try:
         image = Image.open(uploaded_file)
@@ -46,12 +45,11 @@ def process_input_image(uploaded_file, target_ratio=4/6):
         (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
 
         # 3. Tính toán Crop theo tỷ lệ
-        # Quy chuẩn: Mặt chiếm khoảng 70-75% chiều cao ảnh
         crop_h = int(h * 2.5) 
-        crop_w = int(crop_h * target_ratio) # Tính chiều rộng dựa trên tỷ lệ
+        crop_w = int(crop_h * target_ratio)
         
         face_center_x = x + w // 2
-        top_y = int(y - (h * 0.6)) # Lấy dư phần đầu một chút
+        top_y = int(y - (h * 0.6))
         left_x = int(face_center_x - crop_w // 2)
 
         # Tạo canvas
@@ -76,12 +74,11 @@ def apply_effects(base_img, auto_beautify, smooth, sharp, brightness, color_sat)
     
     # Auto Beauty đơn giản
     if auto_beautify:
-        # Tăng sáng nhẹ nếu ảnh tối
         gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
         if np.mean(gray) < 120:
             img_cv = cv2.convertScaleAbs(img_cv, alpha=1.2, beta=10)
 
-    # Làm mịn da (Bilateral Filter)
+    # Làm mịn da
     if smooth > 0:
         d = 5
         sigma = int(smooth * 2) + 10
@@ -101,7 +98,6 @@ def apply_effects(base_img, auto_beautify, smooth, sharp, brightness, color_sat)
 
     img_result = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGRA2RGBA))
 
-    # Chỉnh màu & Sáng
     if color_sat != 1.0:
         img_result = ImageEnhance.Color(img_result).enhance(color_sat)
     if brightness != 1.0:
@@ -116,36 +112,30 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.header("🛠 Thiết lập")
     
-    # --- PHẦN 1: QUY ĐỊNH ẢNH ---
-    with st.expander("📋 QUY ĐỊNH CHỤP ẢNH (Đọc kỹ)", expanded=True):
-        st.markdown("""
-        * **Khuôn mặt:** Nhìn thẳng, biểu cảm tự nhiên.
-        * **Mắt & Môi:** Mắt mở to, mím môi, không cười hở răng.
-        * **Tư thế:** Không nghiêng đầu, không cúi đầu.
-        * **Tóc:** Gọn gàng, **không che trán**, không che lông mày.
-        * **Trạng thái:** Không cau mày, không bực tức.
-        """)
-    
-    # --- PHẦN 2: UPLOAD ---
+    # --- PHẦN 1: UPLOAD (Đã xóa phần quy định) ---
     uploaded_file = st.file_uploader("1. Tải ảnh chân dung lên", type=['jpg', 'png', 'jpeg'])
 
-    # --- PHẦN 3: TÙY CHỌN KÍCH THƯỚC & MÀU NỀN ---
+    # --- PHẦN 2: TÙY CHỌN KÍCH THƯỚC & MÀU NỀN ---
     st.subheader("2. Chọn quy cách")
     
     # Chọn kích thước
-    size_option = st.radio("Kích thước ảnh:", ["4x6 cm (Hộ chiếu/Quốc tế)", "3x4 cm (GPLX/Khám sức khỏe)"])
+    size_option = st.radio("Kích thước:", ["4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
     target_ratio = 3/4 if "3x4" in size_option else 4/6
     
-    # Chọn màu nền
-    bg_color_name = st.radio("Màu nền:", ["Trắng", "Xanh dương"], horizontal=True)
+    # Chọn màu nền (ĐÃ CẬP NHẬT THÊM MÀU)
+    bg_color_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt", "Xanh Đậm"], horizontal=True)
     
-    # Mã màu (RGBA)
-    if bg_color_name == "Xanh dương":
-        bg_color_val = (66, 135, 245, 255) # Xanh dương chuẩn thẻ
-    else:
-        bg_color_val = (255, 255, 255, 255) # Trắng
+    # Xử lý mã màu
+    if bg_color_name == "Trắng":
+        bg_color_val = (255, 255, 255, 255)
+    elif bg_color_name == "Xanh Chuẩn":
+        bg_color_val = (66, 135, 245, 255)  # Xanh thẻ chuẩn
+    elif bg_color_name == "Xanh Nhạt":
+        bg_color_val = (135, 206, 250, 255) # Xanh da trời nhạt
+    elif bg_color_name == "Xanh Đậm":
+        bg_color_val = (0, 71, 171, 255)    # Xanh cô-ban đậm
 
-    # --- LOGIC XỬ LÝ LẠI KHI ĐỔI KÍCH THƯỚC ---
+    # --- LOGIC XỬ LÝ LẠI ---
     if uploaded_file:
         current_state_key = f"{uploaded_file.name}_{size_option}"
         
@@ -156,7 +146,7 @@ with col1:
                 st.session_state.face_info = face_info
                 st.session_state.last_state_key = current_state_key
 
-    # --- PHẦN 4: CHỈNH ĐẸP ---
+    # --- PHẦN 3: CHỈNH ĐẸP ---
     st.markdown("---")
     st.subheader("3. Làm đẹp")
     auto_check = st.checkbox("✨ Auto Sáng Da", value=True)
@@ -168,7 +158,6 @@ with col2:
     
     if 'base_img' in st.session_state and st.session_state.base_img:
         current_base = st.session_state.base_img
-        info = st.session_state.face_info
         
         # 1. Áp dụng hiệu ứng làm đẹp
         processed_person = apply_effects(current_base, auto_check, smooth_val, 0, bright_val, 1.0)
@@ -189,7 +178,7 @@ with col2:
         final_rgb.save(buf, format="JPEG", quality=100, dpi=(300, 300))
         byte_im = buf.getvalue()
         
-        file_name_dl = "anh_3x4_xanh.jpg" if "3x4" in size_option else "anh_4x6_trang.jpg"
+        file_name_dl = f"anh_the_{bg_color_name}.jpg"
         
         st.download_button(
             label="💾 TẢI ẢNH VỀ MÁY",
@@ -199,4 +188,4 @@ with col2:
         )
             
     else:
-        st.info("👈 Vui lòng tải ảnh lên và đọc kỹ quy định bên trái.")
+        st.info("👈 Vui lòng tải ảnh lên ở cột bên trái.")
