@@ -9,27 +9,24 @@ st.set_page_config(page_title="Studio Ảnh Thẻ Online", layout="wide")
 st.title("📸 Studio Ảnh Thẻ - Web Version")
 st.markdown("---")
 
-# --- 2. CÁC HÀM XỬ LÝ (Đã tối ưu Lazy Loading) ---
+# --- 2. CÁC HÀM XỬ LÝ (TỐI ƯU KHỞI ĐỘNG NHANH) ---
 
 @st.cache_resource
 def get_rembg_session():
-    # CHỈ IMPORT KHI CẦN (Giúp app khởi động nhanh)
+    # MẸO QUAN TRỌNG: Import ở trong này để App mở lên ngay lập tức không bị treo
     from rembg import new_session
-    return new_session("u2netp")
-
-def remove_background(image):
-    # CHỈ IMPORT KHI CẦN
-    from rembg import remove
-    session = get_rembg_session()
-    return remove(image, session=session)
+    return new_session("u2netp") # Dùng bản 'u2netp' siêu nhẹ (4MB)
 
 def process_input_image(uploaded_file, target_ratio=4/6):
     try:
         image = Image.open(uploaded_file)
         
         # 1. Tách nền
-        with st.spinner('Đang khởi động AI và tách nền (Lần đầu sẽ hơi lâu)...'):
-            no_bg = remove_background(image)
+        with st.spinner('Đang khởi tạo AI (u2netp) và tách nền...'):
+            # Import ở đây để tránh treo lúc khởi động
+            from rembg import remove 
+            session = get_rembg_session()
+            no_bg = remove(image, session=session)
 
         # 2. Tìm mặt (OpenCV)
         cv_img = cv2.cvtColor(np.array(no_bg.convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -116,9 +113,7 @@ with col1:
     bg_color_val = (66, 135, 245, 255) if bg_color_name == "Xanh dương" else (255, 255, 255, 255)
 
     if uploaded_file:
-        # Key unique để trigger chạy lại khi đổi file hoặc đổi size
         current_state_key = f"{uploaded_file.name}_{size_option}"
-        
         if 'last_state_key' not in st.session_state or st.session_state.last_state_key != current_state_key:
             base_img, face_info = process_input_image(uploaded_file, target_ratio)
             if base_img:
@@ -174,4 +169,3 @@ with col2:
         st.download_button("💾 TẢI ẢNH VỀ", buf.getvalue(), "anh_the.jpg", "image/jpeg")
     else:
         st.info("👈 Tải ảnh lên để bắt đầu.")
-
