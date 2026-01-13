@@ -44,16 +44,16 @@ def process_input_image(uploaded_file, target_ratio=4/6):
         # Lấy mặt lớn nhất
         (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
 
-        # 3. Tính toán Crop (ĐÃ CHỈNH SỬA CHO MẶT TO 78%)
+        # 3. Tính toán Crop (ĐÃ CHỈNH SỬA THEO MẪU BẠN GỬI)
         
         if target_ratio < 0.7: 
-            # === CẤU HÌNH CHO 4x6 (HỘ CHIẾU) ===
-            # Yêu cầu: Mặt chiếm ~70% ảnh -> Zoom sát hơn nữa
-            zoom_factor = 1.7  # Giảm số này xuống để mặt to hơn (Cũ là 1.6)
-            top_offset = 0.20   # Đẩy khung lên cao để không bị mất đỉnh đầu
+            # === CẤU HÌNH CHO 4x6 (HỘ CHIẾU) - ĐÃ SỬA ===
+            # Zoom 2.0: Mặt sẽ nhỏ lại, lấy nhiều vai hơn (giống mẫu)
+            # Offset 0.45: Cách đỉnh đầu xa hơn (giống mẫu)
+            zoom_factor = 2.0  
+            top_offset = 0.45   
         else:
             # === CẤU HÌNH CHO 3x4 (GIẤY TỜ) ===
-            # Giữ nguyên tỷ lệ cân đối có vai
             zoom_factor = 2.2
             top_offset = 0.5
 
@@ -195,17 +195,3 @@ with col2:
             
     else:
         st.info("👈 Vui lòng tải ảnh lên ở cột bên trái.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
