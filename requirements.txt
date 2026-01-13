@@ -1,5 +1,6 @@
 streamlit
 rembg
 opencv-python-headless
-pillow
+Pillow
 numpy
+onnxruntime
