@@ -15,7 +15,7 @@ st.markdown("---")
 def get_rembg_session():
     # CHỈ IMPORT KHI CẦN (Giúp app khởi động nhanh)
     from rembg import new_session
-    return new_session("u2net")
+    return new_session("u2netp")
 
 def remove_background(image):
     # CHỈ IMPORT KHI CẦN
@@ -174,3 +174,4 @@ with col2:
         st.download_button("💾 TẢI ẢNH VỀ", buf.getvalue(), "anh_the.jpg", "image/jpeg")
     else:
         st.info("👈 Tải ảnh lên để bắt đầu.")
+
