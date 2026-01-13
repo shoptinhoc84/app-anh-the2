@@ -8,10 +8,10 @@ import io
 # --- 1. CẤU HÌNH & CACHE ---
 st.set_page_config(page_title="Studio Ảnh Thẻ Online", layout="wide")
 
-# Cache model tách nền để web chạy nhanh hơn
+# [QUAN TRỌNG] Dùng model 'u2netp' (bản nhẹ) để tránh bị lỗi hết RAM trên web miễn phí
 @st.cache_resource
 def get_rembg_session():
-    return new_session("u2net")
+    return new_session("u2netp")
 
 st.title("📸 Studio Ảnh Thẻ - Web Version")
 st.markdown("---")
@@ -180,7 +180,7 @@ with col2:
         # 3. Ghép người lên nền
         final_img.paste(processed_person, (0, 0), processed_person)
         
-        # 4. Hiển thị (Đã xóa phần ghép áo)
+        # 4. Hiển thị
         final_rgb = final_img.convert("RGB")
         st.image(final_rgb, width=350)
         
