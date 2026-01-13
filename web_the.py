@@ -2,31 +2,36 @@ import streamlit as st
 from PIL import Image, ImageEnhance
 import cv2
 import numpy as np
+from rembg import remove, new_session
 import io
 
-# --- 1. CẤU HÌNH ---
+# --- 1. CẤU HÌNH & CACHE ---
 st.set_page_config(page_title="Studio Ảnh Thẻ Online", layout="wide")
+
+# Cache model tách nền để web chạy nhanh hơn
+@st.cache_resource
+def get_rembg_session():
+    return new_session("u2net")
+
 st.title("📸 Studio Ảnh Thẻ - Web Version")
 st.markdown("---")
 
-# --- 2. CÁC HÀM XỬ LÝ (GIỮ NGUYÊN) ---
-
-@st.cache_resource
-def get_rembg_session():
-    from rembg import new_session
-    return new_session("u2netp")
+# --- 2. CÁC HÀM XỬ LÝ ẢNH ---
 
 def process_input_image(uploaded_file, target_ratio=4/6):
+    """
+    Xử lý tách nền và crop mặt theo tỷ lệ (3:4 hoặc 4:6)
+    target_ratio: 0.75 (3x4) hoặc 0.666 (4x6)
+    """
     try:
         image = Image.open(uploaded_file)
         
         # 1. Tách nền
-        with st.spinner('Đang xử lý tách nền...'):
-            from rembg import remove 
+        with st.spinner('Đang tách nền và tìm khuôn mặt...'):
             session = get_rembg_session()
             no_bg = remove(image, session=session)
 
-        # 2. Tìm mặt
+        # 2. Tìm mặt (OpenCV)
         cv_img = cv2.cvtColor(np.array(no_bg.convert("RGB")), cv2.COLOR_RGB2BGR)
         gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
         
@@ -34,45 +39,49 @@ def process_input_image(uploaded_file, target_ratio=4/6):
         faces = face_cascade.detectMultiScale(gray, 1.1, 5)
 
         if len(faces) == 0:
-            st.error("Không tìm thấy khuôn mặt nào!")
+            st.error("Không tìm thấy khuôn mặt nào trong ảnh!")
             return None, None
 
         # Lấy mặt lớn nhất
         (x, y, w, h) = max(faces, key=lambda f: f[2] * f[3])
 
-        # 3. Crop chuẩn
+        # 3. Tính toán Crop theo tỷ lệ
+        # Quy chuẩn: Mặt chiếm khoảng 70-75% chiều cao ảnh
         crop_h = int(h * 2.5) 
-        crop_w = int(crop_h * target_ratio)
+        crop_w = int(crop_h * target_ratio) # Tính chiều rộng dựa trên tỷ lệ
         
         face_center_x = x + w // 2
-        # Logic mới: Lấy rộng hơn phần cổ để ghép áo đẹp hơn
-        top_y = int(y - (h * 0.55)) 
+        top_y = int(y - (h * 0.6)) # Lấy dư phần đầu một chút
         left_x = int(face_center_x - crop_w // 2)
 
+        # Tạo canvas
         canvas_layer = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas_layer.paste(no_bg, (-left_x, -top_y), no_bg)
 
-        # Lưu lại thông số quan trọng để ghép áo
         face_info = {
-            "chin_y": (y + h) - top_y,  # Vị trí cằm trong ảnh đã crop
-            "center_x": crop_w // 2,    # Tâm khuôn mặt
-            "face_w": w,                # Chiều rộng khuôn mặt
-            "face_h": h                 # Chiều cao khuôn mặt
+            "chin_y": (y + h) - top_y, 
+            "center_x": crop_w // 2, 
+            "face_w": w
         }
+        
         return canvas_layer, face_info
 
     except Exception as e:
-        st.error(f"Lỗi: {str(e)}")
+        st.error(f"Lỗi xử lý: {str(e)}")
         return None, None
 
 def apply_effects(base_img, auto_beautify, smooth, sharp, brightness, color_sat):
+    """Áp dụng bộ lọc làm đẹp"""
     img_cv = cv2.cvtColor(np.array(base_img), cv2.COLOR_RGBA2BGRA)
     
+    # Auto Beauty đơn giản
     if auto_beautify:
+        # Tăng sáng nhẹ nếu ảnh tối
         gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
         if np.mean(gray) < 120:
             img_cv = cv2.convertScaleAbs(img_cv, alpha=1.2, beta=10)
 
+    # Làm mịn da (Bilateral Filter)
     if smooth > 0:
         d = 5
         sigma = int(smooth * 2) + 10
@@ -81,6 +90,7 @@ def apply_effects(base_img, auto_beautify, smooth, sharp, brightness, color_sat)
         rgb = cv2.bilateralFilter(rgb, d=d, sigmaColor=sigma, sigmaSpace=sigma)
         img_cv = cv2.merge([rgb, a])
 
+    # Tăng độ nét
     if sharp > 0:
         b, g, r, a = cv2.split(img_cv)
         rgb = cv2.merge([b,g,r])
@@ -91,6 +101,7 @@ def apply_effects(base_img, auto_beautify, smooth, sharp, brightness, color_sat)
 
     img_result = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGRA2RGBA))
 
+    # Chỉnh màu & Sáng
     if color_sat != 1.0:
         img_result = ImageEnhance.Color(img_result).enhance(color_sat)
     if brightness != 1.0:
@@ -98,29 +109,46 @@ def apply_effects(base_img, auto_beautify, smooth, sharp, brightness, color_sat)
         
     return img_result
 
-# --- 3. GIAO DIỆN CHÍNH ---
+# --- 3. GIAO DIỆN CHÍNH (STREAMLIT) ---
 
 col1, col2 = st.columns([1, 2])
 
 with col1:
     st.header("🛠 Thiết lập")
-    uploaded_file = st.file_uploader("1. Tải ảnh gốc", type=['jpg', 'png', 'jpeg'])
     
-    st.subheader("2. Quy cách & Nền")
-    size_option = st.radio("Kích thước:", ["4x6 cm", "3x4 cm"])
+    # --- PHẦN 1: QUY ĐỊNH ẢNH ---
+    with st.expander("📋 QUY ĐỊNH CHỤP ẢNH (Đọc kỹ)", expanded=True):
+        st.markdown("""
+        * **Khuôn mặt:** Nhìn thẳng, biểu cảm tự nhiên.
+        * **Mắt & Môi:** Mắt mở to, mím môi, không cười hở răng.
+        * **Tư thế:** Không nghiêng đầu, không cúi đầu.
+        * **Tóc:** Gọn gàng, **không che trán**, không che lông mày.
+        * **Trạng thái:** Không cau mày, không bực tức.
+        """)
+    
+    # --- PHẦN 2: UPLOAD ---
+    uploaded_file = st.file_uploader("1. Tải ảnh chân dung lên", type=['jpg', 'png', 'jpeg'])
+
+    # --- PHẦN 3: TÙY CHỌN KÍCH THƯỚC & MÀU NỀN ---
+    st.subheader("2. Chọn quy cách")
+    
+    # Chọn kích thước
+    size_option = st.radio("Kích thước ảnh:", ["4x6 cm (Hộ chiếu/Quốc tế)", "3x4 cm (GPLX/Khám sức khỏe)"])
     target_ratio = 3/4 if "3x4" in size_option else 4/6
     
-    bg_color_name = st.radio("Màu nền:", ["Trắng (Siêu sáng)", "Xanh dương (Sáng)", "Xanh dương (Đậm)"], horizontal=True)
+    # Chọn màu nền
+    bg_color_name = st.radio("Màu nền:", ["Trắng", "Xanh dương"], horizontal=True)
     
-    if "Trắng" in bg_color_name:
-        bg_color_val = (255, 255, 255, 255)
-    elif "Sáng" in bg_color_name:
-        bg_color_val = (135, 206, 250, 255)
+    # Mã màu (RGBA)
+    if bg_color_name == "Xanh dương":
+        bg_color_val = (66, 135, 245, 255) # Xanh dương chuẩn thẻ
     else:
-        bg_color_val = (66, 135, 245, 255)
+        bg_color_val = (255, 255, 255, 255) # Trắng
 
+    # --- LOGIC XỬ LÝ LẠI KHI ĐỔI KÍCH THƯỚC ---
     if uploaded_file:
         current_state_key = f"{uploaded_file.name}_{size_option}"
+        
         if 'last_state_key' not in st.session_state or st.session_state.last_state_key != current_state_key:
             base_img, face_info = process_input_image(uploaded_file, target_ratio)
             if base_img:
@@ -128,77 +156,47 @@ with col1:
                 st.session_state.face_info = face_info
                 st.session_state.last_state_key = current_state_key
 
+    # --- PHẦN 4: CHỈNH ĐẸP ---
     st.markdown("---")
     st.subheader("3. Làm đẹp")
-    auto_check = st.checkbox("Auto Sáng Da", value=True)
+    auto_check = st.checkbox("✨ Auto Sáng Da", value=True)
     smooth_val = st.slider("Mịn da", 0, 30, 0)
     bright_val = st.slider("Độ sáng", 0.8, 1.3, 1.0, 0.05)
-    
-    st.markdown("---")
-    st.subheader("4. Ghép Áo (Tự động)")
-    
-    # --- LOGIC GHÉP ÁO MỚI ---
-    suit_file = st.file_uploader("Tải ảnh áo (PNG tách nền)", type=['png'])
-    
-    if suit_file:
-        st.info("💡 Mẹo: Hệ thống sẽ tự động ướm áo vào cổ. Bạn dùng thanh trượt để tinh chỉnh nhẹ nếu cần.")
-        # Thanh trượt bây giờ đóng vai trò là "Tinh chỉnh" (Offset) thay vì vị trí tuyệt đối
-        adj_size = st.slider("Tinh chỉnh độ to nhỏ", -0.5, 0.5, 0.0, 0.05)
-        adj_y = st.slider("Tinh chỉnh Lên/Xuống", -50, 50, 0, 2)
-    else:
-        adj_size = 0
-        adj_y = 0
 
 with col2:
-    st.header(f"🖼 Kết quả")
+    st.header(f"🖼 Kết quả ({size_option})")
     
     if 'base_img' in st.session_state and st.session_state.base_img:
         current_base = st.session_state.base_img
         info = st.session_state.face_info
         
+        # 1. Áp dụng hiệu ứng làm đẹp
         processed_person = apply_effects(current_base, auto_check, smooth_val, 0, bright_val, 1.0)
         
+        # 2. Tạo nền theo màu đã chọn
         w, h = processed_person.size
         final_img = Image.new("RGBA", (w, h), bg_color_val)
+        
+        # 3. Ghép người lên nền
         final_img.paste(processed_person, (0, 0), processed_person)
         
-        # --- THUẬT TOÁN GHÉP ÁO TỰ ĐỘNG ---
-        if suit_file:
-            try:
-                suit_img = Image.open(suit_file)
-                
-                # 1. Tính toán kích thước áo chuẩn dựa trên chiều rộng khuôn mặt
-                # Tỷ lệ vai thường gấp 2.6 - 3.0 lần chiều rộng đầu
-                base_scale = 2.8 
-                final_scale = base_scale + adj_size # Cộng thêm phần tinh chỉnh của người dùng
-                
-                target_w_suit = int(info["face_w"] * final_scale)
-                
-                # Giữ nguyên tỷ lệ khung hình của áo
-                ratio_s = target_w_suit / suit_img.width
-                target_h_suit = int(suit_img.height * ratio_s)
-                
-                suit_resized = suit_img.resize((target_w_suit, target_h_suit), Image.LANCZOS)
-                
-                # 2. Tính toán vị trí (Tâm áo trùng tâm mặt)
-                # Tự động: Cổ áo nằm ngay dưới cằm khoảng 5-10% chiều cao mặt
-                neck_y_estimated = info["chin_y"] + (info["face_h"] * 0.15)
-                
-                # Vị trí X: Căn giữa tuyệt đối
-                pos_x = info["center_x"] - target_w_suit // 2
-                
-                # Vị trí Y: Neo vào cổ + tinh chỉnh
-                pos_y = int(neck_y_estimated + adj_y) 
-                
-                final_img.paste(suit_resized, (pos_x, pos_y), suit_resized)
-            except Exception as e: 
-                st.warning(f"Lỗi file áo: {e}")
-        
+        # 4. Hiển thị (Đã xóa phần ghép áo)
         final_rgb = final_img.convert("RGB")
         st.image(final_rgb, width=350)
         
+        # 5. Nút tải về
         buf = io.BytesIO()
         final_rgb.save(buf, format="JPEG", quality=100, dpi=(300, 300))
-        st.download_button("💾 TẢI ẢNH VỀ", buf.getvalue(), "anh_the.jpg", "image/jpeg")
+        byte_im = buf.getvalue()
+        
+        file_name_dl = "anh_3x4_xanh.jpg" if "3x4" in size_option else "anh_4x6_trang.jpg"
+        
+        st.download_button(
+            label="💾 TẢI ẢNH VỀ MÁY",
+            data=byte_im,
+            file_name=file_name_dl,
+            mime="image/jpeg"
+        )
+            
     else:
-        st.info("👈 Tải ảnh chân dung lên trước.")
+        st.info("👈 Vui lòng tải ảnh lên và đọc kỹ quy định bên trái.")
