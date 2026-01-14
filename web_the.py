@@ -16,7 +16,7 @@ def get_rembg_session():
 st.title("📸 Studio Ảnh Thẻ - Pro Max (STH)")
 st.markdown("---")
 
-# --- 2. HÀM RESET (MỚI) ---
+# --- 2. HÀM RESET ---
 def reset_beauty_params():
     """Đưa toàn bộ thông số làm đẹp về mặc định"""
     st.session_state.val_smooth = 0
@@ -27,7 +27,7 @@ def reset_beauty_params():
     st.session_state.val_sharp = 0
     st.session_state.val_dehaze = 0
 
-# --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI (GIỮ NGUYÊN BẢN ỔN ĐỊNH) ---
+# --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
 def rotate_image(image, angle):
     (h, w) = image.shape[:2]
@@ -58,8 +58,9 @@ def get_face_angle(gray_img, face_rect):
         return angle
     return 0.0
 
-def process_raw_to_nobg(uploaded_file):
-    image = Image.open(uploaded_file)
+def process_raw_to_nobg(file_input):
+    # file_input có thể là từ upload hoặc camera
+    image = Image.open(file_input)
     session = get_rembg_session()
     no_bg_pil = remove(image, session=session)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
@@ -79,7 +80,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         auto_angle = get_face_angle(gray, face_rect)
         
         if abs(auto_angle) < 1.0: auto_angle = 0.0
-        if abs(auto_angle) > 30.0: auto_angle = 0.0 # Chặn góc ảo gây lật ảnh
+        if abs(auto_angle) > 30.0: auto_angle = 0.0 
 
         total_angle = auto_angle + manual_angle
         
@@ -219,7 +220,17 @@ col1, col2 = st.columns([1, 2.2])
 
 with col1:
     st.header("🛠 Thiết lập")
-    uploaded_file = st.file_uploader("1. Tải ảnh lên", type=['jpg', 'png', 'jpeg'])
+    
+    # --- MỚI: CHỌN NGUỒN ẢNH (CAMERA HOẶC UPLOAD) ---
+    input_method = st.radio("Chọn nguồn ảnh:", ["📁 Tải ảnh có sẵn", "📷 Chụp trực tiếp"], horizontal=True)
+    
+    input_file = None
+    
+    if input_method == "📁 Tải ảnh có sẵn":
+        input_file = st.file_uploader("Chọn ảnh từ thư viện", type=['jpg', 'png', 'jpeg'])
+    else:
+        st.info("Hãy cho phép trình duyệt truy cập Camera nếu được hỏi.")
+        input_file = st.camera_input("Chụp ảnh chân dung")
 
     st.subheader("2. Quy cách & Xoay")
     size_option = st.radio("Kích thước:", ["4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
@@ -231,11 +242,15 @@ with col1:
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
 
-    if uploaded_file:
-        if 'current_file_name' not in st.session_state or st.session_state.current_file_name != uploaded_file.name:
-            with st.spinner('Đang tách nền...'):
-                st.session_state.raw_nobg = process_raw_to_nobg(uploaded_file)
-                st.session_state.current_file_name = uploaded_file.name
+    if input_file:
+        # Cơ chế kiểm tra file mới thông minh hơn (hỗ trợ cả Camera và Upload)
+        # Sử dụng thuộc tính size và name để làm key định danh file
+        current_file_key = f"{input_file.name}_{input_file.size}"
+        
+        if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
+            with st.spinner('Đang tách nền... (Vui lòng đợi 3-5s)'):
+                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
+                st.session_state.current_file_key = current_file_key
         
         if 'raw_nobg' in st.session_state:
             final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
@@ -247,15 +262,15 @@ with col1:
                 st.error(debug_info)
 
     st.markdown("---")
-    # --- PHẦN GIAO DIỆN MỚI CÓ NÚT RESET ---
+    
+    # Nút Reset
     c_head, c_btn = st.columns([3, 2])
     with c_head:
         st.subheader("3. Làm đẹp Pro")
     with c_btn:
-        # Nút Reset nằm ngay góc phải tiêu đề
-        st.button("🔄 Mặc định", on_click=reset_beauty_params, help="Quay về ảnh gốc chưa chỉnh sửa")
+        st.button("🔄 Mặc định", on_click=reset_beauty_params, help="Quay về ảnh gốc")
     
-    # Gán key cho từng slider để hàm reset có thể điều khiển được
+    # Slider chỉnh sửa
     with st.expander("✨ Da & Sức Sống", expanded=True):
         p_smooth = st.slider("Mịn da", 0, 30, 0, key="val_smooth")
         p_makeup = st.slider("Hồng hào (Môi/Má)", 0, 50, 0, key="val_makeup")
@@ -295,14 +310,12 @@ with col2:
         buf = io.BytesIO()
         final_rgb.save(buf, format="JPEG", quality=100, dpi=(300, 300))
         
-        # --- SỬA LỖI TẢI FILE TRÊN ĐIỆN THOẠI ---
-        # Đổi tên file chứa dấu Tiếng Việt sang Tiếng Anh
+        # --- FIX LỖI DOWNLOAD TRÊN ĐIỆN THOẠI ---
         name_mapping = {
             "Trắng": "white",
             "Xanh Chuẩn": "blue_standard",
             "Xanh Nhạt": "blue_light"
         }
-        # Nếu không tìm thấy tên thì để mặc định là custom
         safe_bg_name = name_mapping.get(bg_name, "custom")
         
         c1.download_button(
@@ -311,7 +324,7 @@ with col2:
             file_name=f"anh_the_{safe_bg_name}.jpg", 
             mime="image/jpeg"
         )
-        # ------------------------------------------
+        # ----------------------------------------
 
         if c2.button("🖨️ Xem file in 10x15cm"):
             paper, qty = create_print_layout(final_rgb, size_option)
@@ -321,4 +334,4 @@ with col2:
             st.download_button("⬇️ Tải File In", buf_p.getvalue(), "file_in_10x15.jpg", "image/jpeg", key='dl_print')
             
     else:
-        st.info("👈 Tải ảnh lên để bắt đầu.")
+        st.info("👈 Chọn nguồn ảnh (Tải lên hoặc Chụp) để bắt đầu.")
