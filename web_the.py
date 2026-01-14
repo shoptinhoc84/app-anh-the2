@@ -6,13 +6,13 @@ from rembg import remove, new_session
 import io
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.1 Fix", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.0", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - Pro Max (Super Sharp Edition)")
+st.title("📸 Studio Ảnh Thẻ - Pro Max (AI Edition V2)")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -23,10 +23,10 @@ def reset_beauty_params():
     st.session_state.val_exposure = 1.0
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
-    st.session_state.val_sharp_amount = 0 
-    st.session_state.val_denoise = 0      
-    st.session_state.val_blacks = 0       
-    st.session_state.val_whites = 0       
+    st.session_state.val_sharp_amount = 0 # Thay đổi thành Smart Sharpen
+    st.session_state.val_denoise = 0      # Mới: Giảm nhiễu
+    st.session_state.val_blacks = 0       # Mới: Màu đen
+    st.session_state.val_whites = 0       # Mới: Màu trắng
     st.session_state.val_dehaze = 0
     st.session_state.ai_enabled = False
 
@@ -36,6 +36,7 @@ def rotate_image(image, angle):
     (h, w) = image.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    # Dùng borderReplicate để tránh viền đen khi xoay
     rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
     return rotated
 
@@ -56,6 +57,7 @@ def get_face_angle(gray_img, face_rect):
         delta_x = p2[0] - p1[0]
         delta_y = p2[1] - p1[1]
         
+        # Nếu khoảng cách 2 mắt quá gần (lỗi nhận diện), bỏ qua
         if delta_x < w/5: return 0.0
         angle = np.degrees(np.arctan2(delta_y, delta_x))
         return angle
@@ -64,7 +66,7 @@ def get_face_angle(gray_img, face_rect):
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     session = get_rembg_session()
-    no_bg_pil = remove(image, session=session, alpha_matting=True)
+    no_bg_pil = remove(image, session=session, alpha_matting=True) # Thêm alpha_matting cho viền mượt hơn
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
@@ -78,9 +80,13 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         if len(faces) == 0:
             return None, "Không tìm thấy khuôn mặt", 0
 
+        # Lấy khuôn mặt to nhất
         face_rect = max(faces, key=lambda f: f[2] * f[3])
+        
+        # 1. Tự động tính góc nghiêng đầu
         auto_angle = get_face_angle(gray, face_rect)
         
+        # Giới hạn góc auto để tránh xoay bậy
         if abs(auto_angle) < 1.0: auto_angle = 0.0
         if abs(auto_angle) > 20.0: auto_angle = 0.0 
 
@@ -91,18 +97,20 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         else:
             img_rotated = img_working
 
+        # Detect lại mặt sau khi xoay để crop chuẩn
         gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
         
         if len(faces_new) > 0:
             (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3])
         else:
-            (x, y, w, h) = face_rect
+            (x, y, w, h) = face_rect # Fallback về tọa độ cũ
 
-        if target_ratio < 0.7: 
+        # Tỷ lệ zoom khung hình (Cắt cúp)
+        if target_ratio < 0.7: # 4x6 (hẹp ngang)
             zoom_factor = 2.0  
             top_offset = 0.45   
-        else:
+        else: # 3x4 (rộng hơn chút)
             zoom_factor = 2.2
             top_offset = 0.5
 
@@ -113,24 +121,34 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         top_y = int(y - (h * top_offset)) 
         left_x = int(face_center_x - crop_w // 2)
 
+        # Tạo canvas trong suốt để paste mặt vào
         img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
 
-        return canvas, f"Góc Auto: {auto_angle:.1f}° | Tổng: {total_angle:.1f}°", total_angle
+        return canvas, f"Góc xoay Auto: {auto_angle:.1f}° | Tổng: {total_angle:.1f}°", total_angle
 
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. BỘ LỌC NÂNG CAO (FIXED SHARPEN) ---
+# --- 4. BỘ LỌC NÂNG CAO (NEW FEATURES) ---
 
 def adjust_levels(image, blacks=0, whites=0):
+    """
+    Điều chỉnh Levels (Blacks/Whites) giống Photoshop.
+    blacks: 0-50 (kéo vùng tối tối hơn)
+    whites: 0-50 (kéo vùng sáng sáng hơn)
+    """
     if blacks == 0 and whites == 0: return image
+    
+    # Chuyển đổi phạm vi 0-255
     in_black = blacks
     in_white = 255 - whites
+    
     in_black = max(0, min(in_black, 100))
     in_white = max(150, min(in_white, 255))
     
+    # Tạo bảng tra (LUT) để xử lý nhanh
     lut = np.zeros(256, dtype=np.uint8)
     for i in range(256):
         val = (i - in_black) * 255 / (in_white - in_black)
@@ -142,45 +160,43 @@ def adjust_levels(image, blacks=0, whites=0):
     r = cv2.LUT(r, lut)
     return cv2.merge([b, g, r, a])
 
-def apply_super_sharpen(image, amount=0):
-    """
-    Hàm làm nét mới: Sử dụng ma trận tích chập (Convolution Kernel)
-    Giúp ảnh nét đanh và rõ ràng hơn Unsharp Mask cũ.
-    """
+def apply_unsharp_mask(image, amount=0.0):
+    """Làm sắc nét thông minh (Unsharp Mask) - Xóa mờ"""
     if amount == 0: return image
+    # Amount slider 0-20 -> đổi sang scale thực tế 0.0 - 2.0
+    strength = amount / 10.0
     
-    # Kernel làm nét cơ bản
-    kernel = np.array([[0, -1, 0],
-                       [-1, 5, -1],
-                       [0, -1, 0]])
+    # Gaussian Blur làm mờ để tạo mask
+    gaussian = cv2.GaussianBlur(image, (0, 0), 2.0)
     
-    # Áp dụng bộ lọc
-    sharpened = cv2.filter2D(image, -1, kernel)
-    
-    # Trộn ảnh gốc và ảnh nét theo thanh trượt (0-50)
-    # Chia cho 40 để alpha có thể lên tới > 1.0 (Rất nét) nếu kéo max
-    alpha = amount / 40.0 
-    
-    output = cv2.addWeighted(image, 1.0 - alpha, sharpened, alpha, 0)
-    return output
+    # Công thức: Original + (Original - Blurred) * strength
+    sharp = cv2.addWeighted(image, 1.0 + strength, gaussian, -strength, 0)
+    return sharp
 
 def apply_denoise(image, strength=0):
+    """Giảm nhiễu màu"""
     if strength == 0: return image
+    # Strength 0-20. Chuyển sang parameter cho hàm
+    # Lưu ý: Hàm này khá nặng, chạy trên ảnh crop nhỏ thì ok
     b, g, r, a = cv2.split(image)
     rgb = cv2.merge([b, g, r])
+    
+    # h: độ mạnh lọc nhiễu
     h_val = strength
     denoised_rgb = cv2.fastNlMeansDenoisingColored(rgb, None, h_val, h_val, 7, 21)
+    
     b, g, r = cv2.split(denoised_rgb)
     return cv2.merge([b, g, r, a])
 
 def apply_advanced_effects(base_img, params):
+    # Convert PIL to CV2
     img_cv = cv2.cvtColor(np.array(base_img), cv2.COLOR_RGBA2BGRA)
     
-    # 1. Giảm nhiễu (Denoise)
+    # 1. Giảm nhiễu (Chạy đầu tiên để làm sạch ảnh)
     if params['denoise'] > 0:
         img_cv = apply_denoise(img_cv, params['denoise'])
 
-    # 2. Mịn da
+    # 2. Mịn da (Smooth - Bilateral Filter)
     if params['smooth'] > 0:
         d = 5
         sigma = int(params['smooth'] * 2) + 10
@@ -190,7 +206,7 @@ def apply_advanced_effects(base_img, params):
         a = cv2.split(img_cv)[3]
         img_cv = cv2.merge([b,g,r,a])
 
-    # 3. Dehaze
+    # 3. Giảm mù / Phủ mờ (Dehaze - CLAHE)
     if params['dehaze'] > 0:
         b, g, r, a = cv2.split(img_cv)
         lab = cv2.cvtColor(cv2.merge([b,g,r]), cv2.COLOR_BGR2LAB)
@@ -214,7 +230,7 @@ def apply_advanced_effects(base_img, params):
             b = cv2.subtract(b, temp)
         img_cv = cv2.merge([b, g, r, a])
 
-    # 5. Hồng hào
+    # 5. Hồng hào / Sức sống
     if params['makeup'] > 0:
         b, g, r, a = cv2.split(img_cv)
         hsv = cv2.cvtColor(cv2.merge([b,g,r]), cv2.COLOR_BGR2HSV)
@@ -226,14 +242,15 @@ def apply_advanced_effects(base_img, params):
         fb, fg, fr = cv2.split(final_bgr)
         img_cv = cv2.merge([fb, fg, fr, a])
 
-    # 6. Levels
+    # 6. Chỉnh Levels (Blacks / Whites)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_cv = adjust_levels(img_cv, params['blacks'], params['whites'])
     
-    # 7. SUPER SHARPEN (Đã fix)
+    # 7. Làm sắc nét thông minh (Smart Sharpen / Unsharp Mask)
     if params['sharp_amount'] > 0:
-        img_cv = apply_super_sharpen(img_cv, params['sharp_amount'])
+        img_cv = apply_unsharp_mask(img_cv, params['sharp_amount'])
 
+    # Convert back to PIL for Contrast/Brightness (PIL is faster/better for this)
     img_pil = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGRA2RGBA))
     
     if params['exposure'] != 1.0:
@@ -244,7 +261,7 @@ def apply_advanced_effects(base_img, params):
     return img_pil
 
 def create_print_layout(img_person, size_type):
-    PAPER_W, PAPER_H = 1748, 1181 
+    PAPER_W, PAPER_H = 1748, 1181 # A6 300 DPI
     bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
     
     if "4x6" in size_type:
@@ -287,12 +304,14 @@ with col1:
     size_option = st.radio("Kích thước:", ["4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
     target_ratio = 3/4 if "3x4" in size_option else 4/6
     
-    manual_rot = st.slider("Chỉnh nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
+    st.info("💡 Hệ thống tự động xoay mặt theo mắt. Dùng thanh trượt dưới để chỉnh thêm nếu chưa chuẩn.")
+    manual_rot = st.slider("Chỉnh nghiêng đầu (Thủ công):", -15.0, 15.0, 0.0, 0.5)
     
     bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"], horizontal=True)
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
 
+    # --- XỬ LÝ ẢNH ĐẦU VÀO ---
     if input_file:
         current_file_key = f"{input_file.name}_{input_file.size}"
         if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
@@ -310,50 +329,53 @@ with col1:
 
     st.markdown("---")
     
+    # --- PHẦN 3: LÀM ĐẸP & AI STYLE ---
     c_head, c_btn = st.columns([3, 2])
     with c_head:
         st.subheader("3. Xử lý ảnh")
     with c_btn:
         st.button("🔄 Reset", on_click=reset_beauty_params)
 
+    # --- TÍNH NĂNG AI STYLE ---
     with st.expander("🤖 AI Style (Tự động)", expanded=False):
         ai_enabled = st.checkbox("Bật chế độ AI Preset", key='ai_enabled')
         if ai_enabled:
-            gender_style = st.radio("Phong cách:", ["Nam", "Nữ"])
-            if gender_style == "Nam":
+            gender_style = st.radio("Phong cách:", ["Nam (Rõ nét, Tương phản)", "Nữ (Mịn da, Sáng hồng)"])
+            if gender_style == "Nam (Rõ nét, Tương phản)":
                 st.session_state.val_smooth = 5
                 st.session_state.val_makeup = 2
                 st.session_state.val_exposure = 1.05
                 st.session_state.val_contrast = 1.15
-                st.session_state.val_sharp_amount = 20 # Nét cao
+                st.session_state.val_sharp_amount = 15 # Nét cao
                 st.session_state.val_denoise = 5
-                st.session_state.val_blacks = 10
+                st.session_state.val_blacks = 10       # Đen sâu
                 st.session_state.val_whites = 5
+                st.session_state.val_dehaze = 5
             else:
                 st.session_state.val_smooth = 25
                 st.session_state.val_makeup = 20
                 st.session_state.val_exposure = 1.1
                 st.session_state.val_contrast = 1.05
-                st.session_state.val_sharp_amount = 10
+                st.session_state.val_sharp_amount = 8
                 st.session_state.val_denoise = 10
-                st.session_state.val_whites = 15
+                st.session_state.val_blacks = 0
+                st.session_state.val_whites = 15       # Trắng sáng
 
     # --- SLIDER THỦ CÔNG ---
-    with st.expander("✨ Công cụ chỉnh sửa", expanded=True):
+    with st.expander("✨ Công cụ chỉnh sửa (Mới)", expanded=True):
         st.markdown("**1. Chi tiết & Xóa mờ**")
-        # Slider độ nét tăng range lên 50 để dễ chỉnh
-        p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount", help="Kéo lên để thấy ảnh nét đanh lại")
-        p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
-        p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
+        p_sharp_amount = st.slider("Độ sắc nét (Smart Sharpen)", 0, 30, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount", help="Làm nét ảnh bị out nét hoặc mờ")
+        p_dehaze = st.slider("Xóa lớp phủ mờ (Dehaze)", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze", help="Loại bỏ lớp sương mờ")
+        p_denoise = st.slider("Giảm nhiễu hạt (Denoise)", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise", help="Làm sạch ảnh bị noise/sạn")
 
         st.markdown("**2. Ánh sáng & Màu sắc**")
         col_b, col_w = st.columns(2)
         with col_b:
-            p_blacks = st.slider("Nâng màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
+            p_blacks = st.slider("Nâng màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks", help="Làm đậm vùng tối")
         with col_w:
-            p_whites = st.slider("Nâng màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
+            p_whites = st.slider("Nâng màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites", help="Làm sáng vùng sáng")
             
-        p_exposure = st.slider("Độ sáng tổng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
+        p_exposure = st.slider("Độ sáng tổng (Exposure)", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
         
         st.markdown("**3. Da & Trang điểm**")
@@ -372,7 +394,7 @@ with col2:
     st.header(f"🖼 Kết quả ({size_option})")
     
     if 'base' in st.session_state and st.session_state.base:
-        with st.spinner("Đang áp dụng hiệu ứng..."):
+        with st.spinner("Đang áp dụng hiệu ứng nâng cao..."):
             final_person = apply_advanced_effects(st.session_state.base, params)
         
         w, h = final_person.size
@@ -382,6 +404,7 @@ with col2:
         
         st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
         
+        # --- DOWNLOAD ---
         st.markdown("---")
         c1, c2 = st.columns(2)
         
