@@ -4,18 +4,17 @@ import cv2
 import numpy as np
 from rembg import remove, new_session
 import io
-import gc # Garbage Collection để dọn RAM
+import gc
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.4 - Stable", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.5 - Color Fix", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
-    # Dùng mô hình u2netp (nhẹ nhất) để tránh tốn RAM
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.4 (Stable & Fast)")
-st.caption("Phiên bản tối ưu hóa bộ nhớ: Khắc phục lỗi sập khi kéo thanh trượt.")
+st.title("📸 Studio Ảnh Thẻ - V2.5 (Chuẩn Màu)")
+st.caption("Phiên bản V2.5: Đã sửa lỗi chỉnh màu Đen/Trắng bị đen thui hoặc sai màu.")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -33,14 +32,9 @@ def reset_beauty_params():
     st.session_state.val_dehaze = 0
     st.session_state.ai_enabled = False
 
-# --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI (CORE) ---
+# --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
 def resize_image_input(image, max_height=1000):
-    """
-    Giới hạn chiều cao xuống 1000px. 
-    1000px là DƯ SỨC in ảnh thẻ sắc nét (ảnh thẻ 4x6cm chỉ cần khoảng 700px).
-    Điều này giúp app chạy mượt và không bao giờ bị sập.
-    """
     w, h = image.size
     if h > max_height:
         ratio = max_height / h
@@ -60,23 +54,19 @@ def get_face_angle(gray_img, face_rect):
     roi_gray = gray_img[y:y+h, x:x+w]
     eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
     eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
-    
     if len(eyes) >= 2:
         eyes = sorted(eyes, key=lambda e: e[0])
-        (ex1, ey1, ew1, eh1) = eyes[0]
-        (ex2, ey2, ew2, eh2) = eyes[-1]
-        delta_x = (ex2 + ew2//2) - (ex1 + ew1//2)
-        delta_y = (ey2 + eh2//2) - (ey1 + eh1//2)
+        p1 = (eyes[0][0] + eyes[0][2]//2, eyes[0][1] + eyes[0][3]//2)
+        p2 = (eyes[-1][0] + eyes[-1][2]//2, eyes[-1][1] + eyes[-1][3]//2)
+        delta_x = p2[0] - p1[0]
+        delta_y = p2[1] - p1[1]
         if delta_x < w/5: return 0.0
-        angle = np.degrees(np.arctan2(delta_y, delta_x))
-        return angle
+        return np.degrees(np.arctan2(delta_y, delta_x))
     return 0.0
 
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
-    # Resize NGAY LẬP TỨC trước khi đưa vào AI tách nền
     image = resize_image_input(image, max_height=1000)
-    
     session = get_rembg_session()
     no_bg_pil = remove(image, session=session, alpha_matting=True)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
@@ -89,19 +79,14 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         faces = face_cascade.detectMultiScale(gray, 1.1, 5)
 
-        if len(faces) == 0:
-            return None, "Không tìm thấy khuôn mặt", 0
+        if len(faces) == 0: return None, "Không tìm thấy khuôn mặt", 0
 
         face_rect = max(faces, key=lambda f: f[2] * f[3])
         auto_angle = get_face_angle(gray, face_rect)
-        
         if abs(auto_angle) < 1.0 or abs(auto_angle) > 20.0: auto_angle = 0.0 
 
         total_angle = auto_angle + manual_angle
-        if abs(total_angle) > 0.1:
-            img_rotated = rotate_image(img_working, total_angle)
-        else:
-            img_rotated = img_working
+        img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
 
         gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
@@ -112,7 +97,6 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
 
         crop_h = int(h * zoom_factor) 
         crop_w = int(crop_h * target_ratio)
-        
         face_center_x = x + w // 2
         top_y = int(y - (h * top_offset)) 
         left_x = int(face_center_x - crop_w // 2)
@@ -120,21 +104,37 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
-
         return canvas, f"Góc Auto: {auto_angle:.1f}°", total_angle
-
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. BỘ LỌC NÂNG CAO (OPTIMIZED FOR RAM) ---
+# --- 4. BỘ LỌC NÂNG CAO (ĐÃ SỬA LỖI LEVELS) ---
 
 def adjust_levels(image, blacks=0, whites=0):
+    """
+    Hàm chỉnh Levels đã sửa lỗi.
+    Sử dụng float32 để tránh tràn số (âm biến thành dương) gây lỗi đen thui.
+    """
     if blacks == 0 and whites == 0: return image
-    in_black = max(0, min(blacks, 100))
-    in_white = max(150, min(255 - whites, 255))
-    lut = np.arange(256, dtype=np.uint8)
-    lut = (lut - in_black) * 255 / (in_white - in_black)
+    
+    # Chuyển đổi tham số đầu vào
+    in_black = blacks # Giá trị đen (cắt vùng tối)
+    in_white = 255 - whites # Giá trị trắng (cắt vùng sáng)
+    
+    # Đảm bảo an toàn logic
+    if in_black >= in_white: in_black = in_white - 1
+
+    # Tạo bảng tham chiếu (LUT) bằng số thực (float)
+    lut = np.arange(256, dtype=np.float32)
+    
+    # Công thức Levels: (Pixel - InBlack) / (InWhite - InBlack) * 255
+    scale = 255.0 / (in_white - in_black)
+    lut = (lut - in_black) * scale
+    
+    # Cắt giá trị thừa và chuyển về số nguyên dương (uint8)
     lut = np.clip(lut, 0, 255).astype(np.uint8)
+    
+    # Áp dụng vào ảnh
     return cv2.LUT(image, lut)
 
 def apply_super_sharpen(image, amount=0):
@@ -144,39 +144,25 @@ def apply_super_sharpen(image, amount=0):
     return cv2.addWeighted(image, 1.0 - (amount/40.0), sharpened, (amount/40.0), 0)
 
 def apply_clarity(image_bgr, amount=0):
-    """
-    Clarity Optimized: Chỉ xử lý trên kênh màu, không xử lý kênh Alpha.
-    Sử dụng opencv thuần túy để tránh lỗi.
-    """
     if amount == 0: return image_bgr
-    
-    # Chuyển sang LAB để chỉ xử lý kênh sáng (L) - Rất nhẹ và hiệu quả
     lab = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    
-    # Áp dụng CLAHE (Contrast Limited Adaptive Histogram Equalization) lên kênh L
-    # Đây là cách tạo Clarity "xịn" nhất mà tốn ít RAM nhất
     clahe = cv2.createCLAHE(clipLimit=(amount / 10.0) + 1.0, tileGridSize=(8, 8))
     l_new = clahe.apply(l)
-    
     lab_new = cv2.merge((l_new, a, b))
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
 def apply_advanced_effects(base_img, params):
-    # Convert PIL -> BGRA OpenCV
     img_bgra = cv2.cvtColor(np.array(base_img), cv2.COLOR_RGBA2BGRA)
-    
-    # TÁCH RIÊNG ALPHA VÀ RGB
-    # Chúng ta chỉ chỉnh màu trên RGB để tiết kiệm RAM và CPU
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
     
-    # 1. Denoise (Chạy đầu tiên)
+    # 1. Denoise
     if params['denoise'] > 0:
         h_val = params['denoise']
         img_bgr = cv2.fastNlMeansDenoisingColored(img_bgr, None, h_val, h_val, 7, 21)
 
-    # 2. Mịn da
+    # 2. Smooth
     if params['smooth'] > 0:
         d = 5
         sigma = int(params['smooth'] * 2) + 10
@@ -190,7 +176,7 @@ def apply_advanced_effects(base_img, params):
         l_c = clahe.apply(l_c)
         img_bgr = cv2.cvtColor(cv2.merge((l_c, a_c, b_c)), cv2.COLOR_LAB2BGR)
         
-    # 4. Nhiệt độ màu
+    # 4. Temp
     if params['temp'] != 0:
         temp = int(params['temp'])
         b_c, g_c, r_c = cv2.split(img_bgr)
@@ -210,23 +196,21 @@ def apply_advanced_effects(base_img, params):
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
         img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
 
-    # 6. Levels
+    # 6. LEVELS (Đã sửa lỗi)
+    # Lưu ý: Chỉ áp dụng lên kênh màu, không áp dụng lên kênh Alpha (nền trong suốt)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     
-    # 7. CLARITY (Optimized via CLAHE/LAB)
+    # 7. Clarity & Sharpen
     if params['clarity'] > 0:
         img_bgr = apply_clarity(img_bgr, params['clarity'])
-        
-    # 8. SHARPEN
     if params['sharp_amount'] > 0:
         img_bgr = apply_super_sharpen(img_bgr, params['sharp_amount'])
 
-    # GỘP LẠI VỚI KÊNH ALPHA GỐC
+    # Gộp lại
     final_bgra = cv2.merge([img_bgr[:,:,0], img_bgr[:,:,1], img_bgr[:,:,2], a])
     img_pil = Image.fromarray(cv2.cvtColor(final_bgra, cv2.COLOR_BGRA2RGBA))
     
-    # Brightness/Contrast trên PIL (nhẹ hơn OpenCV)
     if params['exposure'] != 1.0:
         img_pil = ImageEnhance.Brightness(img_pil).enhance(params['exposure'])
     if params['contrast'] != 1.0:
@@ -237,7 +221,6 @@ def apply_advanced_effects(base_img, params):
 def create_print_layout(img_person, size_type):
     PAPER_W, PAPER_H = 1748, 1181 
     bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
-    
     if "4x6" in size_type:
         target_w, target_h = 472, 708
         rows, cols = 1, 3
@@ -248,14 +231,12 @@ def create_print_layout(img_person, size_type):
         rows, cols = 2, 4
         start_x, start_y = 100, 100
         gap = 40
-        
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
         for c in range(cols):
             x = start_x + c * (target_w + gap)
             y = start_y + r * (target_h + gap)
             bg_paper.paste(img_resized, (x, y))
-    
     return bg_paper
 
 # --- 5. GIAO DIỆN CHÍNH ---
@@ -264,7 +245,6 @@ col1, col2 = st.columns([1, 2.2])
 
 with col1:
     st.header("🛠 Thiết lập")
-    
     input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
     input_file = None
     if input_method == "📁 Tải ảnh lên":
@@ -275,7 +255,6 @@ with col1:
     st.subheader("2. Cắt & Xoay")
     size_option = st.radio("Kích thước:", ["4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
     target_ratio = 3/4 if "3x4" in size_option else 4/6
-    
     manual_rot = st.slider("Chỉnh nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     
     bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"], horizontal=True)
@@ -284,11 +263,10 @@ with col1:
 
     if input_file:
         current_file_key = f"{input_file.name}_{input_file.size}"
-        # Xóa cache cũ nếu đổi ảnh để giải phóng RAM
         if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
             if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
             if 'base' in st.session_state: del st.session_state.base
-            gc.collect() # Bắt buộc dọn rác RAM
+            gc.collect()
 
         if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
             with st.spinner('Đang tách nền & tối ưu ảnh...'):
@@ -296,7 +274,7 @@ with col1:
                     st.session_state.raw_nobg = process_raw_to_nobg(input_file)
                     st.session_state.current_file_key = current_file_key
                 except Exception as e:
-                    st.error(f"Lỗi tải ảnh: {e}. Vui lòng thử ảnh khác nhỏ hơn.")
+                    st.error(f"Lỗi tải ảnh: {e}. Vui lòng thử ảnh khác.")
         
         if 'raw_nobg' in st.session_state:
             final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
@@ -304,15 +282,13 @@ with col1:
                 st.session_state.base = final_crop
                 st.caption(f"ℹ️ {debug_info}")
             else:
-                st.error(f"Lỗi nhận diện khuôn mặt: {debug_info}")
+                st.error(f"Lỗi: {debug_info}")
 
     st.markdown("---")
     
     c_head, c_btn = st.columns([3, 2])
-    with c_head:
-        st.subheader("3. Xử lý ảnh")
-    with c_btn:
-        st.button("🔄 Reset", on_click=reset_beauty_params)
+    with c_head: st.subheader("3. Xử lý ảnh")
+    with c_btn: st.button("🔄 Reset", on_click=reset_beauty_params)
 
     with st.expander("🤖 AI Style (Tự động)", expanded=False):
         ai_enabled = st.checkbox("Bật chế độ AI Preset", key='ai_enabled')
@@ -338,7 +314,6 @@ with col1:
                 st.session_state.val_denoise = 10
                 st.session_state.val_whites = 15
 
-    # --- SLIDER ---
     with st.expander("✨ Công cụ chỉnh sửa", expanded=True):
         st.markdown("**1. Chi tiết & Độ nét**")
         p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
@@ -349,9 +324,9 @@ with col1:
         st.markdown("**2. Ánh sáng & Màu sắc**")
         col_b, col_w = st.columns(2)
         with col_b:
-            p_blacks = st.slider("Nâng màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
+            p_blacks = st.slider("Làm sâu màu Đen (Levels)", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks", help="Tăng độ tương phản vùng tối (làm đen tóc, áo)")
         with col_w:
-            p_whites = st.slider("Nâng màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
+            p_whites = st.slider("Làm rực màu Trắng (Levels)", 0, 50, st.session_state.get('val_whites', 0), key="val_whites", help="Tăng độ sáng vùng sáng (làm sáng da, sơ mi trắng)")
             
         p_exposure = st.slider("Độ sáng tổng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
@@ -370,7 +345,6 @@ with col1:
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
-    
     if 'base' in st.session_state and st.session_state.base:
         try:
             with st.spinner("Đang áp dụng hiệu ứng..."):
@@ -382,13 +356,11 @@ with col2:
             final_rgb = final_img.convert("RGB")
             
             st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
-            
             st.markdown("---")
             c1, c2 = st.columns(2)
             
             buf = io.BytesIO()
             final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
-            
             name_mapping = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}
             safe_bg_name = name_mapping.get(bg_name, "custom")
             
@@ -400,8 +372,7 @@ with col2:
                 buf_p = io.BytesIO()
                 paper.save(buf_p, format="JPEG", quality=100, dpi=(300, 300))
                 st.download_button("⬇️ Tải file in", buf_p.getvalue(), "layout_in_A6.jpg", "image/jpeg", key='dl_print')
-        
         except Exception as e:
-            st.error(f"Lỗi xử lý ảnh: {e}. Vui lòng thử ảnh nhẹ hơn hoặc Reset.")
+            st.error(f"Lỗi: {e}. Vui lòng thử Reset.")
     else:
         st.info("👈 Hãy chọn ảnh ở cột bên trái để bắt đầu xử lý.")
