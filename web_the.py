@@ -13,22 +13,43 @@ try:
 except ImportError:
     HAS_FPDF = False
 
-# --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.15 - Auto Level", layout="wide")
+# --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
+st.set_page_config(page_title="Studio Ảnh Thẻ Pro", layout="wide", page_icon="📸")
+
+# CSS làm đẹp giao diện
+st.markdown("""
+<style>
+    /* Làm đẹp tiêu đề */
+    .main-title {
+        font-size: 2.5rem;
+        color: #4B0082;
+        text-align: center;
+        font-weight: 800;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px #cccccc;
+    }
+    /* Làm nổi bật nút Auto */
+    div[data-testid="stButton"] > button:first-child {
+        border-radius: 10px;
+        font-weight: bold;
+    }
+    /* Đóng khung ảnh kết quả */
+    .image-container {
+        border: 3px solid #4B0082;
+        padding: 10px;
+        border-radius: 10px;
+        background-color: #f0f2f6;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.15 (Auto 2 Cấp Độ)")
-if not HAS_FPDF:
-    st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
-st.markdown("---")
-
-# --- 2. HÀM RESET & AUTO ĐẸP (LOGIC MỚI) ---
-
+# --- 2. LOGIC HÀM (GIỮ NGUYÊN KHÔNG ĐỔI) ---
 def reset_beauty_params():
-    """Đưa về 0 hết"""
     st.session_state.val_smooth = 0
     st.session_state.val_makeup = 0
     st.session_state.val_exposure = 1.0
@@ -44,26 +65,17 @@ def reset_beauty_params():
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
     st.session_state.val_edge_soft = 0
-    st.session_state.auto_level = 0 # Reset level auto
+    st.session_state.auto_level = 0
 
 def set_auto_beauty():
-    """
-    Logic Auto 3 bước:
-    - Click 1: Level 1 (Cơ bản)
-    - Click 2: Level 2 (Nhân đôi thông số)
-    - Click 3: Reset
-    """
-    # Khởi tạo nếu chưa có
     if 'auto_level' not in st.session_state:
         st.session_state.auto_level = 0
-    
-    # Tăng level: 0 -> 1 -> 2 -> 0
     current_level = st.session_state.auto_level
     next_level = (current_level + 1) % 3
     st.session_state.auto_level = next_level
 
     if next_level == 1:
-        st.toast("✨ Auto Level 1: Làm đẹp nhẹ nhàng")
+        st.toast("✨ Auto Level 1: Nhẹ nhàng")
         st.session_state.val_smooth = 5
         st.session_state.val_makeup = 2
         st.session_state.val_exposure = 1.05
@@ -71,30 +83,25 @@ def set_auto_beauty():
         st.session_state.val_blacks = 4
         st.session_state.val_sharp_amount = 2
         st.session_state.val_edge_soft = 2
-        
     elif next_level == 2:
-        st.toast("✨✨ Auto Level 2: Làm đẹp rực rỡ (x2)")
-        st.session_state.val_smooth = 10       # 5 x 2
-        st.session_state.val_makeup = 4        # 2 x 2
-        st.session_state.val_exposure = 1.10   # Tăng thêm 5% nữa
-        st.session_state.val_whites = 12       # 6 x 2
-        st.session_state.val_blacks = 8        # 4 x 2
-        st.session_state.val_sharp_amount = 4  # 2 x 2
-        st.session_state.val_edge_soft = 4     # 2 x 2
-        
+        st.toast("✨✨ Auto Level 2: Rực rỡ")
+        st.session_state.val_smooth = 10
+        st.session_state.val_makeup = 4
+        st.session_state.val_exposure = 1.10
+        st.session_state.val_whites = 12
+        st.session_state.val_blacks = 8
+        st.session_state.val_sharp_amount = 4
+        st.session_state.val_edge_soft = 4
     else:
-        st.toast("🔄 Đã tắt Auto (Về mặc định)")
+        st.toast("🔄 Đã tắt Auto")
         reset_beauty_params()
         return
 
-    # Các thông số giữ nguyên cho cả 2 level
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_clarity = 0
     st.session_state.val_denoise = 0
     st.session_state.val_dehaze = 0
-
-# --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
 def resize_image_input(image, max_height=1200):
     w, h = image.size
@@ -178,8 +185,6 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. TÍNH NĂNG TRANSFORM & EDGE SOFT ---
-
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
     w, h = image.size
@@ -202,8 +207,6 @@ def apply_edge_softness(image_rgba, strength=0):
     alpha_blurred = cv2.GaussianBlur(alpha, (k_size, k_size), 0)
     img[:, :, 3] = alpha_blurred
     return Image.fromarray(img)
-
-# --- 5. BỘ LỌC NÂNG CAO ---
 
 def adjust_levels(image, blacks=0, whites=0):
     if blacks == 0 and whites == 0: return image
@@ -338,67 +341,102 @@ def create_print_layout_preview(img_person, size_type):
             bg_paper.paste(img_resized, (x, y))
     return bg_paper
 
-# --- 6. GIAO DIỆN CHÍNH ---
-col1, col2 = st.columns([1, 2.2])
+# --- 3. GIAO DIỆN CHÍNH (ĐÃ SẮP XẾP LẠI) ---
 
-with col1:
-    st.header("🛠 Thiết lập")
+st.markdown('<div class="main-title">📸 STUDIO ẢNH THẺ CHUYÊN NGHIỆP</div>', unsafe_allow_html=True)
+if not HAS_FPDF:
+    st.warning("⚠️ Chưa cài thư viện in ấn. Chạy: `pip install fpdf`")
+
+# --- A. THANH BÊN (SIDEBAR) - CÀI ĐẶT ĐẦU VÀO ---
+with st.sidebar:
+    st.header("⚙️ Thiết lập Đầu vào")
+    st.info("Bước 1: Chọn ảnh và loại ảnh")
+    
     input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
     input_file = None
     if input_method == "📁 Tải ảnh lên":
-        input_file = st.file_uploader("Chọn ảnh gốc", type=['jpg', 'png', 'jpeg'])
+        input_file = st.file_uploader("Chọn file (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
     else:
         input_file = st.camera_input("Chụp ảnh ngay")
 
-    st.subheader("2. Loại ảnh")
-    size_option = st.radio("Kích thước:", ["5x5 cm (Visa Mỹ)", "4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
+    st.markdown("---")
+    st.subheader("Kích thước & Phông nền")
+    size_option = st.radio("Chọn cỡ ảnh:", ["5x5 cm (Visa Mỹ)", "4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
     if "Visa Mỹ" in size_option: target_ratio = 1.0 
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
     
-    manual_rot = st.slider("Chỉnh nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
-    
-    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"], horizontal=True)
+    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"])
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
-
-    if input_file:
-        current_file_key = f"{input_file.name}_{input_file.size}"
-        if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
-            if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
-            if 'base' in st.session_state: del st.session_state.base
-            gc.collect()
-
-        if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
-            with st.spinner('Đang tách nền...'):
-                try:
-                    st.session_state.raw_nobg = process_raw_to_nobg(input_file)
-                    st.session_state.current_file_key = current_file_key
-                except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
-        
-        if 'raw_nobg' in st.session_state:
-            final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
-            if final_crop: st.session_state.base = final_crop
-            else: st.error(f"Lỗi: {debug_info}")
-
-    st.markdown("---")
     
-    # --- PHẦN NÚT BẤM ---
-    c_head, c_btn = st.columns([3, 2])
-    with c_head: st.subheader("3. Chỉnh sửa")
-    with c_btn: 
-        b1, b2 = st.columns(2)
-        # Nút Auto logic mới (x1 và x2)
-        current_lvl = st.session_state.get('auto_level', 0)
-        label_auto = f"✨ Auto (Lv {current_lvl})" if current_lvl > 0 else "✨ Auto Đẹp"
-        
-        with b1: st.button(label_auto, on_click=set_auto_beauty, help="Ấn 1 lần: Đẹp nhẹ. Ấn 2 lần: Đẹp rực rỡ (x2). Ấn 3 lần: Reset.")
-        with b2: st.button("🔄 Reset", on_click=reset_beauty_params)
+    st.markdown("---")
+    st.caption("Phiên bản V2.15 - Update UI")
 
-    with st.expander("🤖 AI Style (Tự động)", expanded=False):
-        ai_enabled = st.checkbox("Bật chế độ AI Preset", key='ai_enabled')
+# --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
+if input_file:
+    current_file_key = f"{input_file.name}_{input_file.size}"
+    if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
+        if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
+        if 'base' in st.session_state: del st.session_state.base
+        gc.collect()
+
+    if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
+        with st.spinner('⏳ Đang tách nền AI...'):
+            try:
+                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
+                st.session_state.current_file_key = current_file_key
+            except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
+
+# --- C. GIAO DIỆN CHÍNH (MAIN COLUMN) ---
+
+# Khu vực nút bấm lớn
+col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
+with col_btn1:
+    current_lvl = st.session_state.get('auto_level', 0)
+    label_auto = f"✨ AUTO ĐẸP (Level {current_lvl})" if current_lvl > 0 else "✨ AUTO ĐẸP NGAY"
+    # Nút bấm Auto
+    st.button(label_auto, on_click=set_auto_beauty, type="primary", use_container_width=True, help="Bấm để tự động làm đẹp")
+
+with col_btn2:
+    # Nút Reset
+    st.button("🔄 Làm lại", on_click=reset_beauty_params, use_container_width=True)
+
+st.divider()
+
+# Chia cột: Bên trái là Công cụ chỉnh, Bên phải là Ảnh
+col_tools, col_result = st.columns([1, 1.2])
+
+with col_tools:
+    st.subheader("🎛️ Bảng điều khiển")
+    
+    # Góc xoay thủ công (Để riêng ở trên cho dễ thấy)
+    manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
+    if 'raw_nobg' in st.session_state:
+        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
+        if final_crop: st.session_state.base = final_crop
+        else: st.error(f"Lỗi: {debug_info}")
+
+    # Sắp xếp Slider vào TAB cho gọn
+    tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
+    
+    with tab1:
+        st.caption("Chỉnh độ sáng và màu sắc")
+        p_exposure = st.slider("Độ sáng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
+        p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
+        p_temp = st.slider("Nhiệt độ màu (Ấm/Lạnh)", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
+        col_b, col_w = st.columns(2)
+        with col_b: p_blacks = st.slider("Màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
+        with col_w: p_whites = st.slider("Màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
+
+    with tab2:
+        st.caption("Làm đẹp da")
+        p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
+        p_makeup = st.slider("Trang điểm/Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
+        st.markdown("---")
+        ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
         if ai_enabled:
-            gender_style = st.radio("Phong cách:", ["Nam", "Nữ"])
+            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], horizontal=True)
             if gender_style == "Nam":
                 st.session_state.val_smooth = 5
                 st.session_state.val_makeup = 2
@@ -418,33 +456,20 @@ with col1:
                 st.session_state.val_clarity = 5
                 st.session_state.val_denoise = 10
                 st.session_state.val_whites = 15
-    
-    with st.expander("📐 4. Bố cục (Ctrl + T)", expanded=True):
-        p_zoom = st.slider("Phóng to / Thu nhỏ", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
-        p_move_x = st.slider("↔️ Dịch Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
-        p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
 
-    with st.expander("✨ 5. Công cụ chỉnh màu", expanded=True):
-        st.markdown("**Chi tiết & Độ nét**")
+    with tab3:
+        st.caption("Căn chỉnh vị trí và độ nét")
+        p_zoom = st.slider("Phóng to/Thu nhỏ", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1: p_move_x = st.number_input("Dịch Ngang", -100, 100, st.session_state.get('val_move_x', 0), key="val_move_x")
+        with col_m2: p_move_y = st.number_input("Dịch Dọc", -100, 100, st.session_state.get('val_move_y', 0), key="val_move_y")
+        
+        st.markdown("---")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
-        p_edge_soft = st.slider("Làm mềm viền tóc (Anti-Alias)", 0, 10, st.session_state.get('val_edge_soft', 0), 1, key="val_edge_soft")
-        
-        p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
-        p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
-        p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
-
-        st.markdown("**Ánh sáng & Màu sắc**")
-        col_b, col_w = st.columns(2)
-        with col_b: p_blacks = st.slider("Làm sâu màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
-        with col_w: p_whites = st.slider("Làm rực màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
-            
-        p_exposure = st.slider("Độ sáng tổng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
-        p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
-        
-        st.markdown("**Da & Trang điểm**")
-        p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
-        p_makeup = st.slider("Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
-        p_temp = st.slider("Nhiệt độ màu", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
+        p_clarity = st.slider("Chi tiết (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
+        p_denoise = st.slider("Giảm nhiễu (Denoise)", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
+        p_dehaze = st.slider("Khử sương mù", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
+        p_edge_soft = st.slider("Làm mềm biên", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
 
     params = {
         'smooth': p_smooth, 'makeup': p_makeup,
@@ -455,53 +480,49 @@ with col1:
         'edge_soft': p_edge_soft
     }
 
-with col2:
-    st.header(f"🖼 Kết quả ({size_option})")
-    
-    # --- TÍNH NĂNG SO SÁNH (COMPARE) ---
-    show_compare = st.checkbox("👁️ So sánh Trước / Sau", value=False)
-
+# --- D. HIỂN THỊ KẾT QUẢ ---
+with col_result:
     if 'base' in st.session_state and st.session_state.base:
-        try:
-            with st.spinner("Đang xử lý..."):
-                final_person = apply_advanced_effects(st.session_state.base, params)
-            
-            w, h = final_person.size
-            final_img = Image.new("RGBA", (w, h), bg_val)
-            final_img.paste(final_person, (0, 0), final_person)
-            final_rgb = final_img.convert("RGB")
-            
-            tab1, tab2 = st.tabs(["Ảnh Kết Quả", "Layout In"])
-            
-            with tab1:
-                if show_compare:
-                    c_before, c_after = st.columns(2)
-                    with c_before:
-                        st.image(st.session_state.base, caption="Ảnh Gốc (Đã tách nền)", use_container_width=True)
-                    with c_after:
-                        st.image(final_rgb, caption="Ảnh Sau Chỉnh Sửa", use_container_width=True)
-                else:
-                    st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
-                
-                st.markdown("---")
-                c1, c2 = st.columns(2)
-                buf = io.BytesIO()
-                final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
-                safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}.get(bg_name, "custom")
-                c1.download_button(label="⬇️ Tải Ảnh JPG", data=buf.getvalue(), file_name=f"ket_qua_{safe_bg_name}.jpg", mime="image/jpeg")
-            
-            with tab2:
-                st.caption("Xem trước khi in (A6)")
-                preview_paper = create_print_layout_preview(final_rgb, size_option)
-                st.image(preview_paper, use_container_width=True)
-                
-                if HAS_FPDF:
-                    pdf_data = create_pdf(final_rgb, size_option)
-                    st.download_button(label="📄 Tải File PDF (In Chuẩn)", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf")
-                else:
-                    st.error("Chức năng PDF đang tắt do thiếu thư viện `fpdf`.")
+        # Xử lý ảnh
+        with st.spinner("🚀 Đang xử lý ảnh..."):
+            final_person = apply_advanced_effects(st.session_state.base, params)
+        
+        w, h = final_person.size
+        final_img = Image.new("RGBA", (w, h), bg_val)
+        final_img.paste(final_person, (0, 0), final_person)
+        final_rgb = final_img.convert("RGB")
 
-        except Exception as e:
-            st.error(f"Lỗi: {e}. Thử Reset hoặc chọn ảnh khác.")
+        # Hiển thị ảnh trong khung
+        st.markdown('<div class="image-container">', unsafe_allow_html=True)
+        st.image(final_rgb, caption=f"KẾT QUẢ: {size_option}", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("### 📥 Tải về & In ấn")
+        
+        # Tabs cho phần download
+        d_tab1, d_tab2 = st.tabs(["Lưu Ảnh (JPG)", "In Ấn (PDF)"])
+        
+        with d_tab1:
+            buf = io.BytesIO()
+            final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
+            safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}.get(bg_name, "custom")
+            st.download_button(label="⬇️ Tải Ảnh JPG Chất Lượng Cao", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+
+        with d_tab2:
+            st.image(create_print_layout_preview(final_rgb, size_option), caption="Xem trước bản in (Khổ A6)", use_container_width=True)
+            if HAS_FPDF:
+                pdf_data = create_pdf(final_rgb, size_option)
+                st.download_button(label="📄 Tải File PDF để in", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf", use_container_width=True)
+            else:
+                st.error("Thiếu thư viện fpdf.")
+        
+        # So sánh (ẩn trong expander cho gọn)
+        with st.expander("👁️ So sánh Trước / Sau"):
+            c_before, c_after = st.columns(2)
+            with c_before: st.image(st.session_state.base, caption="Gốc")
+            with c_after: st.image(final_rgb, caption="Sau chỉnh sửa")
+
     else:
-        st.info("👈 Hãy chọn ảnh ở cột bên trái để bắt đầu xử lý.")
+        # Màn hình chờ khi chưa có ảnh
+        st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
+        st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
