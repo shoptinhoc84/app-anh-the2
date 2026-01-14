@@ -14,21 +14,20 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.15 - Auto Level", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.16 - Auto Remove", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.15 (Auto 2 Cấp Độ)")
+st.title("📸 Studio Ảnh Thẻ - V2.16 (Xóa Mụn/Xăm)")
 if not HAS_FPDF:
     st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
 
-# --- 2. HÀM RESET & AUTO ĐẸP (LOGIC MỚI) ---
+# --- 2. HÀM RESET & AUTO ĐẸP ---
 
 def reset_beauty_params():
-    """Đưa về 0 hết"""
     st.session_state.val_smooth = 0
     st.session_state.val_makeup = 0
     st.session_state.val_exposure = 1.0
@@ -44,26 +43,21 @@ def reset_beauty_params():
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
     st.session_state.val_edge_soft = 0
-    st.session_state.auto_level = 0 # Reset level auto
+    st.session_state.auto_level = 0
+    # Reset params mới
+    st.session_state.val_remove_blemish = False
+    st.session_state.val_blemish_threshold = 20
 
 def set_auto_beauty():
-    """
-    Logic Auto 3 bước:
-    - Click 1: Level 1 (Cơ bản)
-    - Click 2: Level 2 (Nhân đôi thông số)
-    - Click 3: Reset
-    """
-    # Khởi tạo nếu chưa có
     if 'auto_level' not in st.session_state:
         st.session_state.auto_level = 0
     
-    # Tăng level: 0 -> 1 -> 2 -> 0
     current_level = st.session_state.auto_level
     next_level = (current_level + 1) % 3
     st.session_state.auto_level = next_level
 
     if next_level == 1:
-        st.toast("✨ Auto Level 1: Làm đẹp nhẹ nhàng")
+        st.toast("✨ Auto Level 1: Đẹp tự nhiên")
         st.session_state.val_smooth = 5
         st.session_state.val_makeup = 2
         st.session_state.val_exposure = 1.05
@@ -73,26 +67,27 @@ def set_auto_beauty():
         st.session_state.val_edge_soft = 2
         
     elif next_level == 2:
-        st.toast("✨✨ Auto Level 2: Làm đẹp rực rỡ (x2)")
-        st.session_state.val_smooth = 10       # 5 x 2
-        st.session_state.val_makeup = 4        # 2 x 2
-        st.session_state.val_exposure = 1.10   # Tăng thêm 5% nữa
-        st.session_state.val_whites = 12       # 6 x 2
-        st.session_state.val_blacks = 8        # 4 x 2
-        st.session_state.val_sharp_amount = 4  # 2 x 2
-        st.session_state.val_edge_soft = 4     # 2 x 2
+        st.toast("✨✨ Auto Level 2: Đẹp rực rỡ (x2)")
+        st.session_state.val_smooth = 10
+        st.session_state.val_makeup = 4
+        st.session_state.val_exposure = 1.10
+        st.session_state.val_whites = 12
+        st.session_state.val_blacks = 8
+        st.session_state.val_sharp_amount = 4
+        st.session_state.val_edge_soft = 4
         
     else:
-        st.toast("🔄 Đã tắt Auto (Về mặc định)")
+        st.toast("🔄 Reset Default")
         reset_beauty_params()
         return
 
-    # Các thông số giữ nguyên cho cả 2 level
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_clarity = 0
     st.session_state.val_denoise = 0
     st.session_state.val_dehaze = 0
+    # Không tự động bật xóa mụn để tránh xóa nhầm nốt ruồi duyên
+    st.session_state.val_remove_blemish = False 
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
@@ -178,7 +173,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. TÍNH NĂNG TRANSFORM & EDGE SOFT ---
+# --- 4. TÍNH NĂNG TRANSFORM & BIẾN ĐỔI ---
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
@@ -203,7 +198,33 @@ def apply_edge_softness(image_rgba, strength=0):
     img[:, :, 3] = alpha_blurred
     return Image.fromarray(img)
 
-# --- 5. BỘ LỌC NÂNG CAO ---
+# --- 5. TÍNH NĂNG XÓA MỤN (BLEMISH REMOVAL) ---
+
+def apply_blemish_removal(image_bgr, threshold=20):
+    """
+    Tự động xóa mụn/vết thâm bằng BlackHat Morphology + Inpainting
+    """
+    # 1. Chuyển sang ảnh xám
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    
+    # 2. BlackHat để tìm các điểm tối trên nền sáng (đặc trưng của mụn/vết thâm)
+    # Kernel size 9x9 -> 15x15 phù hợp cho các đốm nhỏ/trung bình
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+    blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+    
+    # 3. Tạo mask dựa trên ngưỡng sáng (threshold)
+    # Các điểm có độ chênh lệch sáng > threshold sẽ được chọn
+    _, mask = cv2.threshold(blackhat, threshold, 255, cv2.THRESH_BINARY)
+    
+    # 4. Nở vùng mask ra một chút để bao trùm vết thâm
+    mask = cv2.dilate(mask, None, iterations=3)
+    
+    # 5. Inpainting (Vẽ bù đắp) vào các vùng mask
+    inpainted = cv2.inpaint(image_bgr, mask, 3, cv2.INPAINT_TELEA)
+    
+    return inpainted
+
+# --- 6. BỘ LỌC NÂNG CAO ---
 
 def adjust_levels(image, blacks=0, whites=0):
     if blacks == 0 and whites == 0: return image
@@ -232,6 +253,7 @@ def apply_clarity(image_bgr, amount=0):
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
 def apply_advanced_effects(base_img, params):
+    # 1. Transform & Soft Edge
     img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
     if params['edge_soft'] > 0:
         img_transformed = apply_edge_softness(img_transformed, params['edge_soft'])
@@ -240,6 +262,12 @@ def apply_advanced_effects(base_img, params):
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
     
+    # --- MỚI: XÓA MỤN / HÌNH XĂM (Xử lý trên BGR trước khi chỉnh màu) ---
+    if params['remove_blemish']:
+        # Áp dụng xóa khuyết điểm
+        img_bgr = apply_blemish_removal(img_bgr, params['blemish_threshold'])
+
+    # 2. Hiệu ứng khác
     if params['denoise'] > 0:
         h_val = params['denoise']
         img_bgr = cv2.fastNlMeansDenoisingColored(img_bgr, None, h_val, h_val, 7, 21)
@@ -291,7 +319,6 @@ def create_pdf(img_person, size_type):
     pdf.add_page()
     temp_img_path = "temp_print.jpg"
     img_person.save(temp_img_path, quality=100, dpi=(300, 300))
-    
     if "5x5" in size_type:
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
@@ -304,7 +331,6 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
         margin_x, margin_y = 5, 10
-
     for r in range(rows):
         for c in range(cols):
             x = margin_x + c * (w_mm + 2)
@@ -338,7 +364,7 @@ def create_print_layout_preview(img_person, size_type):
             bg_paper.paste(img_resized, (x, y))
     return bg_paper
 
-# --- 6. GIAO DIỆN CHÍNH ---
+# --- 7. GIAO DIỆN CHÍNH ---
 col1, col2 = st.columns([1, 2.2])
 
 with col1:
@@ -359,6 +385,7 @@ with col1:
     manual_rot = st.slider("Chỉnh nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     
     bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"], horizontal=True)
+    if "Visa Mỹ" in size_option and bg_name != "Trắng": st.warning("⚠️ Visa Mỹ bắt buộc nền TRẮNG.")
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
 
@@ -388,11 +415,9 @@ with col1:
     with c_head: st.subheader("3. Chỉnh sửa")
     with c_btn: 
         b1, b2 = st.columns(2)
-        # Nút Auto logic mới (x1 và x2)
         current_lvl = st.session_state.get('auto_level', 0)
         label_auto = f"✨ Auto (Lv {current_lvl})" if current_lvl > 0 else "✨ Auto Đẹp"
-        
-        with b1: st.button(label_auto, on_click=set_auto_beauty, help="Ấn 1 lần: Đẹp nhẹ. Ấn 2 lần: Đẹp rực rỡ (x2). Ấn 3 lần: Reset.")
+        with b1: st.button(label_auto, on_click=set_auto_beauty, help="Click 1: Đẹp nhẹ - Click 2: Đẹp x2 - Click 3: Tắt")
         with b2: st.button("🔄 Reset", on_click=reset_beauty_params)
 
     with st.expander("🤖 AI Style (Tự động)", expanded=False):
@@ -424,6 +449,14 @@ with col1:
         p_move_x = st.slider("↔️ Dịch Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
         p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
 
+    # --- MỤC XÓA MỤN MỚI ---
+    with st.expander("🔍 Xóa mụn & Khuyết điểm", expanded=True):
+        col_m1, col_m2 = st.columns([1, 1.5])
+        with col_m1:
+            p_remove_blemish = st.checkbox("Bật xóa tự động", value=st.session_state.get('val_remove_blemish', False), key='val_remove_blemish')
+        with col_m2:
+            p_blemish_threshold = st.slider("Ngưỡng phát hiện", 5, 50, st.session_state.get('val_blemish_threshold', 20), 1, key="val_blemish_threshold", help="Càng cao càng xóa mạnh (dễ xóa nhầm)")
+
     with st.expander("✨ 5. Công cụ chỉnh màu", expanded=True):
         st.markdown("**Chi tiết & Độ nét**")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
@@ -452,14 +485,16 @@ with col1:
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
         'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
-        'edge_soft': p_edge_soft
+        'edge_soft': p_edge_soft,
+        'remove_blemish': p_remove_blemish,
+        'blemish_threshold': p_blemish_threshold
     }
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
     
     # --- TÍNH NĂNG SO SÁNH (COMPARE) ---
-    show_compare = st.checkbox("👁️ So sánh Trước / Sau", value=False)
+    show_compare = st.checkbox("👁️ Xem Trước / Sau (So sánh)", value=False)
 
     if 'base' in st.session_state and st.session_state.base:
         try:
@@ -477,9 +512,9 @@ with col2:
                 if show_compare:
                     c_before, c_after = st.columns(2)
                     with c_before:
-                        st.image(st.session_state.base, caption="Ảnh Gốc (Đã tách nền)", use_container_width=True)
+                        st.image(st.session_state.base, caption="Gốc (Tách nền)", use_container_width=True)
                     with c_after:
-                        st.image(final_rgb, caption="Ảnh Sau Chỉnh Sửa", use_container_width=True)
+                        st.image(final_rgb, caption="Đã chỉnh sửa", use_container_width=True)
                 else:
                     st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
                 
