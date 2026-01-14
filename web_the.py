@@ -6,7 +6,7 @@ from rembg import remove, new_session
 import io
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.1 Fix", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.2 - Clarity Update", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
@@ -24,6 +24,7 @@ def reset_beauty_params():
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_sharp_amount = 0 
+    st.session_state.val_clarity = 0      # <--- MỚI: Reset Clarity
     st.session_state.val_denoise = 0      
     st.session_state.val_blacks = 0       
     st.session_state.val_whites = 0       
@@ -122,7 +123,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. BỘ LỌC NÂNG CAO (FIXED SHARPEN) ---
+# --- 4. BỘ LỌC NÂNG CAO (MỚI: CLARITY) ---
 
 def adjust_levels(image, blacks=0, whites=0):
     if blacks == 0 and whites == 0: return image
@@ -143,25 +144,32 @@ def adjust_levels(image, blacks=0, whites=0):
     return cv2.merge([b, g, r, a])
 
 def apply_super_sharpen(image, amount=0):
-    """
-    Hàm làm nét mới: Sử dụng ma trận tích chập (Convolution Kernel)
-    Giúp ảnh nét đanh và rõ ràng hơn Unsharp Mask cũ.
-    """
     if amount == 0: return image
-    
-    # Kernel làm nét cơ bản
     kernel = np.array([[0, -1, 0],
                        [-1, 5, -1],
                        [0, -1, 0]])
-    
-    # Áp dụng bộ lọc
     sharpened = cv2.filter2D(image, -1, kernel)
-    
-    # Trộn ảnh gốc và ảnh nét theo thanh trượt (0-50)
-    # Chia cho 40 để alpha có thể lên tới > 1.0 (Rất nét) nếu kéo max
     alpha = amount / 40.0 
-    
     output = cv2.addWeighted(image, 1.0 - alpha, sharpened, alpha, 0)
+    return output
+
+def apply_clarity(image, amount=0):
+    """
+    Tăng cường độ rõ nét (Local Contrast)
+    Giúp ảnh có độ sâu hơn mà không bị nhiễu như Sharpen.
+    """
+    if amount == 0: return image
+    
+    # Chuyển đổi sang float để tính toán không bị mất dữ liệu
+    # Sử dụng GaussianBlur bán kính lớn để tách lớp cấu trúc
+    kernel_size = 25 # Bán kính mờ (cần số lẻ)
+    blurred = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
+    
+    # Công thức: Original + (Original - Blurred) * amount
+    # Tương đương: Original * (1 + alpha) + Blurred * (-alpha)
+    alpha = amount / 30.0 # Hệ số cường độ
+    
+    output = cv2.addWeighted(image, 1.0 + alpha, blurred, -alpha, 0)
     return output
 
 def apply_denoise(image, strength=0):
@@ -230,7 +238,10 @@ def apply_advanced_effects(base_img, params):
     if params['blacks'] > 0 or params['whites'] > 0:
         img_cv = adjust_levels(img_cv, params['blacks'], params['whites'])
     
-    # 7. SUPER SHARPEN (Đã fix)
+    # 7. SUPER SHARPEN & CLARITY
+    if params['clarity'] > 0:  # <--- MỚI: Áp dụng Clarity
+        img_cv = apply_clarity(img_cv, params['clarity'])
+        
     if params['sharp_amount'] > 0:
         img_cv = apply_super_sharpen(img_cv, params['sharp_amount'])
 
@@ -325,7 +336,8 @@ with col1:
                 st.session_state.val_makeup = 2
                 st.session_state.val_exposure = 1.05
                 st.session_state.val_contrast = 1.15
-                st.session_state.val_sharp_amount = 20 # Nét cao
+                st.session_state.val_sharp_amount = 20
+                st.session_state.val_clarity = 15 # Nam giới cần độ rõ nét cao
                 st.session_state.val_denoise = 5
                 st.session_state.val_blacks = 10
                 st.session_state.val_whites = 5
@@ -335,14 +347,19 @@ with col1:
                 st.session_state.val_exposure = 1.1
                 st.session_state.val_contrast = 1.05
                 st.session_state.val_sharp_amount = 10
+                st.session_state.val_clarity = 5  # Nữ giới cần mềm mại hơn
                 st.session_state.val_denoise = 10
                 st.session_state.val_whites = 15
 
     # --- SLIDER THỦ CÔNG ---
     with st.expander("✨ Công cụ chỉnh sửa", expanded=True):
-        st.markdown("**1. Chi tiết & Xóa mờ**")
-        # Slider độ nét tăng range lên 50 để dễ chỉnh
-        p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount", help="Kéo lên để thấy ảnh nét đanh lại")
+        st.markdown("**1. Chi tiết & Độ nét**")
+        
+        p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount", help="Tăng độ sắc cạnh các đường nét nhỏ")
+        
+        # --- MỚI: Slider Clarity ---
+        p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity", help="Tăng độ sâu và tương phản khối cho ảnh")
+        
         p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
         p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
 
@@ -364,7 +381,8 @@ with col1:
     params = {
         'smooth': p_smooth, 'makeup': p_makeup,
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
-        'sharp_amount': p_sharp_amount, 'dehaze': p_dehaze,
+        'sharp_amount': p_sharp_amount, 'clarity': p_clarity, # <---
+        'dehaze': p_dehaze,
         'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise
     }
 
