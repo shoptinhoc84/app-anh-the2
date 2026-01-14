@@ -14,13 +14,13 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.16 - Auto Remove", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.17 - Smart Retouch", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.16 (Xóa Mụn/Xăm)")
+st.title("📸 Studio Ảnh Thẻ - V2.17 (Cà Da Thông Minh)")
 if not HAS_FPDF:
     st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
@@ -28,7 +28,7 @@ st.markdown("---")
 # --- 2. HÀM RESET & AUTO ĐẸP ---
 
 def reset_beauty_params():
-    st.session_state.val_smooth = 0
+    st.session_state.val_smooth = 0 # Mịn da (Smart)
     st.session_state.val_makeup = 0
     st.session_state.val_exposure = 1.0
     st.session_state.val_contrast = 1.0
@@ -44,9 +44,8 @@ def reset_beauty_params():
     st.session_state.val_move_y = 0
     st.session_state.val_edge_soft = 0
     st.session_state.auto_level = 0
-    # Reset params mới
-    st.session_state.val_remove_blemish = False
-    st.session_state.val_blemish_threshold = 20
+    # Tham số mới cho xóa mụn (thực chất là cường độ smooth)
+    st.session_state.val_acne_strength = 0
 
 def set_auto_beauty():
     if 'auto_level' not in st.session_state:
@@ -57,8 +56,10 @@ def set_auto_beauty():
     st.session_state.auto_level = next_level
 
     if next_level == 1:
-        st.toast("✨ Auto Level 1: Đẹp tự nhiên")
-        st.session_state.val_smooth = 5
+        st.toast("✨ Auto Level 1: Da sáng mịn tự nhiên")
+        # Sử dụng Smart Smooth thay vì blur thường
+        st.session_state.val_smooth = 30       # Smart Smooth (0-100)
+        st.session_state.val_acne_strength = 10 # Xóa khuyết điểm nhẹ
         st.session_state.val_makeup = 2
         st.session_state.val_exposure = 1.05
         st.session_state.val_whites = 6
@@ -67,14 +68,15 @@ def set_auto_beauty():
         st.session_state.val_edge_soft = 2
         
     elif next_level == 2:
-        st.toast("✨✨ Auto Level 2: Đẹp rực rỡ (x2)")
-        st.session_state.val_smooth = 10
+        st.toast("✨✨ Auto Level 2: Da láng bóng (Che phủ cao)")
+        st.session_state.val_smooth = 60       # Smart Smooth cực mạnh
+        st.session_state.val_acne_strength = 30 # Xóa khuyết điểm mạnh
         st.session_state.val_makeup = 4
         st.session_state.val_exposure = 1.10
         st.session_state.val_whites = 12
-        st.session_state.val_blacks = 8
+        st.session_state.val_blacks = 6
         st.session_state.val_sharp_amount = 4
-        st.session_state.val_edge_soft = 4
+        st.session_state.val_edge_soft = 3
         
     else:
         st.toast("🔄 Reset Default")
@@ -86,8 +88,6 @@ def set_auto_beauty():
     st.session_state.val_clarity = 0
     st.session_state.val_denoise = 0
     st.session_state.val_dehaze = 0
-    # Không tự động bật xóa mụn để tránh xóa nhầm nốt ruồi duyên
-    st.session_state.val_remove_blemish = False 
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
@@ -173,7 +173,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. TÍNH NĂNG TRANSFORM & BIẾN ĐỔI ---
+# --- 4. TÍNH NĂNG TRANSFORM & EDGE SOFT ---
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
@@ -198,31 +198,39 @@ def apply_edge_softness(image_rgba, strength=0):
     img[:, :, 3] = alpha_blurred
     return Image.fromarray(img)
 
-# --- 5. TÍNH NĂNG XÓA MỤN (BLEMISH REMOVAL) ---
+# --- 5. TÍNH NĂNG CÀ DA THÔNG MINH (SMART SMOOTH) ---
 
-def apply_blemish_removal(image_bgr, threshold=20):
+def apply_smart_skin_smoothing(image_bgr, smooth_amount=0, acne_strength=0):
     """
-    Tự động xóa mụn/vết thâm bằng BlackHat Morphology + Inpainting
+    Sử dụng Edge Preserving Filter để làm mịn da mà vẫn giữ nét.
+    smooth_amount: Độ mịn tổng thể (0-100)
+    acne_strength: Độ mạnh để xóa khuyết điểm (làm phẳng texture)
     """
-    # 1. Chuyển sang ảnh xám
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    if smooth_amount == 0 and acne_strength == 0:
+        return image_bgr
     
-    # 2. BlackHat để tìm các điểm tối trên nền sáng (đặc trưng của mụn/vết thâm)
-    # Kernel size 9x9 -> 15x15 phù hợp cho các đốm nhỏ/trung bình
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
-    blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+    # Chuyển đổi tham số slider sang tham số thuật toán
+    # Sigma_s: Không gian (độ loang), Sigma_r: Màu sắc (độ giữ biên)
     
-    # 3. Tạo mask dựa trên ngưỡng sáng (threshold)
-    # Các điểm có độ chênh lệch sáng > threshold sẽ được chọn
-    _, mask = cv2.threshold(blackhat, threshold, 255, cv2.THRESH_BINARY)
+    # Mức độ cơ bản
+    val_s = smooth_amount * 1.5  # 0 -> 150
+    val_r = 0.3 + (smooth_amount / 200.0) # 0.3 -> 0.8
     
-    # 4. Nở vùng mask ra một chút để bao trùm vết thâm
-    mask = cv2.dilate(mask, None, iterations=3)
+    # Nếu có yêu cầu xóa mụn/xăm, tăng cường độ lên cực mạnh
+    if acne_strength > 0:
+        val_s += acne_strength * 2
+        val_r += (acne_strength / 100.0)
+
+    # Giới hạn
+    val_s = min(val_s, 200)
+    val_r = min(val_r, 0.9) # Không quá 1.0 để tránh mất hết nét
     
-    # 5. Inpainting (Vẽ bù đắp) vào các vùng mask
-    inpainted = cv2.inpaint(image_bgr, mask, 3, cv2.INPAINT_TELEA)
+    # Edge Preserving Filter (Recursive Filter hoặc Normconv)
+    # Ở đây dùng edgePreservingFilter của OpenCV (nhanh và hiệu quả cho da)
+    # flags=1 (RECURS_FILTER) nhanh hơn, flags=2 (NORMCONV_FILTER) đẹp hơn chút nhưng chậm
+    smoothed = cv2.edgePreservingFilter(image_bgr, flags=1, sigma_s=val_s, sigma_r=val_r)
     
-    return inpainted
+    return smoothed
 
 # --- 6. BỘ LỌC NÂNG CAO ---
 
@@ -262,19 +270,15 @@ def apply_advanced_effects(base_img, params):
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
     
-    # --- MỚI: XÓA MỤN / HÌNH XĂM (Xử lý trên BGR trước khi chỉnh màu) ---
-    if params['remove_blemish']:
-        # Áp dụng xóa khuyết điểm
-        img_bgr = apply_blemish_removal(img_bgr, params['blemish_threshold'])
+    # 2. XỬ LÝ DA & KHUYẾT ĐIỂM (New Smart Smooth)
+    if params['smooth'] > 0 or params['acne_strength'] > 0:
+        img_bgr = apply_smart_skin_smoothing(img_bgr, params['smooth'], params['acne_strength'])
 
-    # 2. Hiệu ứng khác
+    # 3. Hiệu ứng khác
     if params['denoise'] > 0:
         h_val = params['denoise']
         img_bgr = cv2.fastNlMeansDenoisingColored(img_bgr, None, h_val, h_val, 7, 21)
-    if params['smooth'] > 0:
-        d = 5
-        sigma = int(params['smooth'] * 2) + 10
-        img_bgr = cv2.bilateralFilter(img_bgr, d=d, sigmaColor=sigma, sigmaSpace=sigma)
+    
     if params['dehaze'] > 0:
         lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
         l_c, a_c, b_c = cv2.split(lab)
@@ -319,6 +323,7 @@ def create_pdf(img_person, size_type):
     pdf.add_page()
     temp_img_path = "temp_print.jpg"
     img_person.save(temp_img_path, quality=100, dpi=(300, 300))
+    
     if "5x5" in size_type:
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
@@ -331,6 +336,7 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
         margin_x, margin_y = 5, 10
+
     for r in range(rows):
         for c in range(cols):
             x = margin_x + c * (w_mm + 2)
@@ -419,49 +425,21 @@ with col1:
         label_auto = f"✨ Auto (Lv {current_lvl})" if current_lvl > 0 else "✨ Auto Đẹp"
         with b1: st.button(label_auto, on_click=set_auto_beauty, help="Click 1: Đẹp nhẹ - Click 2: Đẹp x2 - Click 3: Tắt")
         with b2: st.button("🔄 Reset", on_click=reset_beauty_params)
-
-    with st.expander("🤖 AI Style (Tự động)", expanded=False):
-        ai_enabled = st.checkbox("Bật chế độ AI Preset", key='ai_enabled')
-        if ai_enabled:
-            gender_style = st.radio("Phong cách:", ["Nam", "Nữ"])
-            if gender_style == "Nam":
-                st.session_state.val_smooth = 5
-                st.session_state.val_makeup = 2
-                st.session_state.val_exposure = 1.05
-                st.session_state.val_contrast = 1.15
-                st.session_state.val_sharp_amount = 20
-                st.session_state.val_clarity = 15
-                st.session_state.val_denoise = 5
-                st.session_state.val_blacks = 10
-                st.session_state.val_whites = 5
-            else:
-                st.session_state.val_smooth = 25
-                st.session_state.val_makeup = 20
-                st.session_state.val_exposure = 1.1
-                st.session_state.val_contrast = 1.05
-                st.session_state.val_sharp_amount = 10
-                st.session_state.val_clarity = 5
-                st.session_state.val_denoise = 10
-                st.session_state.val_whites = 15
     
     with st.expander("📐 4. Bố cục (Ctrl + T)", expanded=True):
         p_zoom = st.slider("Phóng to / Thu nhỏ", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
         p_move_x = st.slider("↔️ Dịch Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
         p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
 
-    # --- MỤC XÓA MỤN MỚI ---
-    with st.expander("🔍 Xóa mụn & Khuyết điểm", expanded=True):
-        col_m1, col_m2 = st.columns([1, 1.5])
-        with col_m1:
-            p_remove_blemish = st.checkbox("Bật xóa tự động", value=st.session_state.get('val_remove_blemish', False), key='val_remove_blemish')
-        with col_m2:
-            p_blemish_threshold = st.slider("Ngưỡng phát hiện", 5, 50, st.session_state.get('val_blemish_threshold', 20), 1, key="val_blemish_threshold", help="Càng cao càng xóa mạnh (dễ xóa nhầm)")
+    # --- MỤC XÓA MỤN & DA MỚI ---
+    with st.expander("🔍 5. Làm đẹp Da & Khuyết điểm", expanded=True):
+        p_smooth = st.slider("Mịn da (Smart Smooth)", 0, 100, st.session_state.get('val_smooth', 0), key="val_smooth", help="Công nghệ mới: Làm mịn da nhưng vẫn giữ nét mắt/mũi.")
+        p_acne_strength = st.slider("Xóa mụn & Hình xăm (Độ phủ)", 0, 50, st.session_state.get('val_acne_strength', 0), key="val_acne_strength", help="Kéo càng cao, lớp phủ càng dày để che mụn/sẹo.")
+        p_edge_soft = st.slider("Làm mềm viền tóc", 0, 10, st.session_state.get('val_edge_soft', 0), 1, key="val_edge_soft")
 
-    with st.expander("✨ 5. Công cụ chỉnh màu", expanded=True):
+    with st.expander("✨ 6. Công cụ chỉnh màu", expanded=True):
         st.markdown("**Chi tiết & Độ nét**")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
-        p_edge_soft = st.slider("Làm mềm viền tóc (Anti-Alias)", 0, 10, st.session_state.get('val_edge_soft', 0), 1, key="val_edge_soft")
-        
         p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
         p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
         p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
@@ -474,26 +452,23 @@ with col1:
         p_exposure = st.slider("Độ sáng tổng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
         
-        st.markdown("**Da & Trang điểm**")
-        p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
+        st.markdown("**Trang điểm**")
         p_makeup = st.slider("Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         p_temp = st.slider("Nhiệt độ màu", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
 
     params = {
-        'smooth': p_smooth, 'makeup': p_makeup,
+        'smooth': p_smooth, 'acne_strength': p_acne_strength, 'makeup': p_makeup,
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
         'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
-        'edge_soft': p_edge_soft,
-        'remove_blemish': p_remove_blemish,
-        'blemish_threshold': p_blemish_threshold
+        'edge_soft': p_edge_soft
     }
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
     
-    # --- TÍNH NĂNG SO SÁNH (COMPARE) ---
+    # --- SO SÁNH TRƯỚC SAU ---
     show_compare = st.checkbox("👁️ Xem Trước / Sau (So sánh)", value=False)
 
     if 'base' in st.session_state and st.session_state.base:
