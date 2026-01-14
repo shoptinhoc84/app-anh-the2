@@ -5,17 +5,25 @@ import numpy as np
 from rembg import remove, new_session
 import io
 import gc
-from fpdf import FPDF # Cần cài thư viện này: pip install fpdf
+
+# --- XỬ LÝ LỖI THƯ VIỆN FPDF ---
+# Nếu chưa cài fpdf, app vẫn chạy bình thường nhưng sẽ tắt tính năng in PDF
+try:
+    from fpdf import FPDF
+    HAS_FPDF = True
+except ImportError:
+    HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.8 - Ultimate", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.9 - Clean", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.8 (Full Option)")
-st.caption("Phiên bản V2.8: Tích hợp Ghép Áo (Vest/Sơ mi) & Xuất file PDF chuẩn in.")
+st.title("📸 Studio Ảnh Thẻ - V2.9 (Bản Ổn Định)")
+if not HAS_FPDF:
+    st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -34,9 +42,6 @@ def reset_beauty_params():
     st.session_state.val_zoom = 1.0
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
-    # Reset Áo
-    st.session_state.suit_zoom = 1.0
-    st.session_state.suit_y = 0
     st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
@@ -123,7 +128,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. TÍNH NĂNG TRANSFORM & GHÉP ÁO ---
+# --- 4. TÍNH NĂNG TRANSFORM (CTRL + T) ---
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
@@ -138,33 +143,6 @@ def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     paste_y = center_y + move_y
     canvas.paste(img_resized, (paste_x, paste_y), img_resized)
     return canvas
-
-def overlay_suit(person_img, suit_file, suit_zoom, suit_y):
-    """Hàm ghép áo lên người"""
-    if suit_file is None: return person_img
-    
-    suit = Image.open(suit_file).convert("RGBA")
-    pw, ph = person_img.size
-    
-    # Tính toán size áo dựa trên ảnh người
-    # Mặc định áo sẽ rộng bằng vai người (ước lượng)
-    suit_w_base = int(pw * 1.2 * suit_zoom) # 1.2 là hệ số dư vai
-    ratio = suit_w_base / suit.size[0]
-    suit_h_new = int(suit.size[1] * ratio)
-    
-    suit_resized = suit.resize((suit_w_base, suit_h_new), Image.Resampling.LANCZOS)
-    
-    # Vị trí đặt áo (Căn giữa theo chiều ngang, chỉnh Y theo slider)
-    pos_x = (pw - suit_w_base) // 2
-    # Mặc định đặt áo ở dưới cùng ảnh, rồi cộng thêm suit_y
-    pos_y = ph - suit_h_new + 150 + suit_y # +150 để đẩy lên ngực
-    
-    # Tạo layer mới để dán
-    layer = Image.new("RGBA", person_img.size, (0,0,0,0))
-    layer.paste(suit_resized, (pos_x, pos_y), suit_resized)
-    
-    # Gộp ảnh người và ảnh áo
-    return Image.alpha_composite(person_img, layer)
 
 # --- 5. BỘ LỌC NÂNG CAO ---
 
@@ -194,15 +172,11 @@ def apply_clarity(image_bgr, amount=0):
     lab_new = cv2.merge((l_new, a, b))
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
-def apply_advanced_effects(base_img, params, suit_file=None):
-    # 1. Transform Người trước
+def apply_advanced_effects(base_img, params):
+    # 1. Transform (Ctrl+T)
     img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
     
-    # 2. Ghép Áo (Nếu có)
-    if suit_file:
-        img_transformed = overlay_suit(img_transformed, suit_file, params['suit_zoom'], params['suit_y'])
-
-    # 3. Chỉnh màu
+    # 2. Chuyển đổi màu & Hiệu ứng
     img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
@@ -252,15 +226,15 @@ def apply_advanced_effects(base_img, params, suit_file=None):
     return img_pil
 
 def create_pdf(img_person, size_type):
-    """Tạo file PDF để in"""
-    pdf = FPDF(orientation='P', unit='mm', format='A6') # Khổ A6 (105x148mm)
+    """Tạo file PDF để in (Chỉ chạy khi có thư viện fpdf)"""
+    if not HAS_FPDF: return None
+    
+    pdf = FPDF(orientation='P', unit='mm', format='A6')
     pdf.add_page()
     
-    # Lưu tạm ảnh ra file để chèn vào PDF
     temp_img_path = "temp_print.jpg"
     img_person.save(temp_img_path, quality=100, dpi=(300, 300))
     
-    # Cấu hình size mm
     if "5x5" in size_type:
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
@@ -269,7 +243,7 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 40, 60
         cols, rows = 2, 2
         margin_x, margin_y = 10, 10
-    else: # 3x4
+    else: 
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
         margin_x, margin_y = 5, 10
@@ -283,7 +257,6 @@ def create_pdf(img_person, size_type):
     return pdf.output(dest='S').encode('latin-1')
 
 def create_print_layout_preview(img_person, size_type):
-    """Tạo layout JPEG để xem trước"""
     PAPER_W, PAPER_H = 1748, 1181 
     bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
     if "5x5" in size_type: 
@@ -388,18 +361,7 @@ with col1:
         p_move_x = st.slider("↔️ Dịch Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
         p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
 
-    # --- TÍNH NĂNG GHÉP ÁO MỚI ---
-    with st.expander("👔 5. Ghép Áo (Virtual Suit)", expanded=True):
-        st.caption("Tải ảnh áo vest/sơ mi (định dạng PNG nền trong suốt) lên đây.")
-        suit_file = st.file_uploader("Chọn file áo (PNG)", type=['png'])
-        if suit_file:
-            p_suit_zoom = st.slider("Chỉnh Size Áo", 0.5, 1.5, st.session_state.get('suit_zoom', 1.0), 0.05, key="suit_zoom")
-            p_suit_y = st.slider("Chỉnh Áo Lên / Xuống", -200, 200, st.session_state.get('suit_y', 0), 5, key="suit_y")
-        else:
-            p_suit_zoom = 1.0
-            p_suit_y = 0
-
-    with st.expander("✨ 6. Công cụ chỉnh màu", expanded=True):
+    with st.expander("✨ 5. Công cụ chỉnh màu", expanded=True):
         st.markdown("**Chi tiết & Độ nét**")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
         p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
@@ -424,24 +386,21 @@ with col1:
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
-        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
-        # Suit params
-        'suit_zoom': p_suit_zoom, 'suit_y': p_suit_y
+        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y
     }
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
     if 'base' in st.session_state and st.session_state.base:
         try:
-            with st.spinner("Đang xử lý (Ghép áo & chỉnh màu)..."):
-                final_person = apply_advanced_effects(st.session_state.base, params, suit_file)
+            with st.spinner("Đang xử lý..."):
+                final_person = apply_advanced_effects(st.session_state.base, params)
             
             w, h = final_person.size
             final_img = Image.new("RGBA", (w, h), bg_val)
             final_img.paste(final_person, (0, 0), final_person)
             final_rgb = final_img.convert("RGB")
             
-            # --- VIEW SO SÁNH ---
             tab1, tab2 = st.tabs(["Ảnh Kết Quả", "Layout In"])
             
             with tab1:
@@ -458,9 +417,11 @@ with col2:
                 preview_paper = create_print_layout_preview(final_rgb, size_option)
                 st.image(preview_paper, use_container_width=True)
                 
-                # --- NÚT XUẤT PDF MỚI ---
-                pdf_data = create_pdf(final_rgb, size_option)
-                st.download_button(label="📄 Tải File PDF (In Chuẩn)", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf")
+                if HAS_FPDF:
+                    pdf_data = create_pdf(final_rgb, size_option)
+                    st.download_button(label="📄 Tải File PDF (In Chuẩn)", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf")
+                else:
+                    st.error("Chức năng PDF đang tắt do thiếu thư viện `fpdf`.")
 
         except Exception as e:
             st.error(f"Lỗi: {e}. Thử Reset hoặc chọn ảnh khác.")
