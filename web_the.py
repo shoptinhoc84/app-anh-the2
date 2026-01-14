@@ -7,14 +7,14 @@ import io
 import gc
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.6 - Ctrl+T", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.7 - Visa Mỹ", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.6 (Ctrl + T)")
-st.caption("Phiên bản V2.6: Thêm tính năng Zoom & Di chuyển bố cục như Photoshop.")
+st.title("📸 Studio Ảnh Thẻ - V2.7 (Chuyên Visa Mỹ)")
+st.caption("Phiên bản V2.7: Thêm chuẩn Visa Mỹ (5x5cm), tỷ lệ mặt chuẩn 50-70%.")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -30,7 +30,6 @@ def reset_beauty_params():
     st.session_state.val_blacks = 0       
     st.session_state.val_whites = 0       
     st.session_state.val_dehaze = 0
-    # Reset cả phần Ctrl + T
     st.session_state.val_zoom = 1.0
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
@@ -38,7 +37,8 @@ def reset_beauty_params():
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
-def resize_image_input(image, max_height=1000):
+def resize_image_input(image, max_height=1200):
+    # Tăng giới hạn lên 1200 để đảm bảo ảnh Visa Mỹ nét căng
     w, h = image.size
     if h > max_height:
         ratio = max_height / h
@@ -70,7 +70,7 @@ def get_face_angle(gray_img, face_rect):
 
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
-    image = resize_image_input(image, max_height=1000)
+    image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
     no_bg_pil = remove(image, session=session, alpha_matting=True)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
@@ -96,11 +96,25 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
         (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3]) if len(faces_new) > 0 else face_rect
 
-        zoom_factor = 2.0 if target_ratio < 0.7 else 2.2
-        top_offset = 0.45 if target_ratio < 0.7 else 0.5
+        # --- LOGIC CẮT ẢNH ---
+        if target_ratio == 1.0: 
+            # VISA MỸ (VUÔNG)
+            # Yêu cầu: Mặt chiếm 50-69% chiều cao.
+            # zoom_factor = 1.8 -> Mặt chiếm khoảng 55% (An toàn)
+            zoom_factor = 1.8  
+            top_offset = 0.55 # Căn mắt hơi cao hơn giữa một chút
+        elif target_ratio < 0.7: 
+            # 3x4 (Dọc)
+            zoom_factor = 2.0  
+            top_offset = 0.45   
+        else:
+            # 4x6 (Dọc)
+            zoom_factor = 2.2
+            top_offset = 0.5
 
         crop_h = int(h * zoom_factor) 
         crop_w = int(crop_h * target_ratio)
+        
         face_center_x = x + w // 2
         top_y = int(y - (h * top_offset)) 
         left_x = int(face_center_x - crop_w // 2)
@@ -115,36 +129,18 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
 # --- 4. TÍNH NĂNG TRANSFORM (CTRL + T) ---
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
-    """
-    Phóng to/Thu nhỏ và di chuyển ảnh trong khung (Canvas)
-    """
     if zoom == 1.0 and move_x == 0 and move_y == 0:
         return image
-
     w, h = image.size
-    
-    # 1. Tính kích thước mới
     new_w = int(w * zoom)
     new_h = int(h * zoom)
-    
-    # 2. Resize ảnh (giữ chất lượng cao nhất)
     img_resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    
-    # 3. Tạo canvas trống cùng kích thước gốc
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    
-    # 4. Tính toán vị trí dán (Căn giữa + Dịch chuyển)
-    # Tọa độ gốc (chưa dịch) là để ảnh nằm giữa
     center_x = (w - new_w) // 2
     center_y = (h - new_h) // 2
-    
-    # Áp dụng dịch chuyển từ slider
     paste_x = center_x + move_x
     paste_y = center_y + move_y
-    
-    # 5. Dán ảnh đã resize vào canvas
     canvas.paste(img_resized, (paste_x, paste_y), img_resized)
-    
     return canvas
 
 # --- 5. BỘ LỌC NÂNG CAO ---
@@ -176,36 +172,24 @@ def apply_clarity(image_bgr, amount=0):
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
 def apply_advanced_effects(base_img, params):
-    # Bước 1: Áp dụng Transform (Ctrl+T) trước
-    img_transformed = apply_transform(
-        base_img, 
-        params['zoom'], 
-        params['move_x'], 
-        params['move_y']
-    )
-    
-    # Bước 2: Chuyển sang OpenCV để chỉnh màu
+    img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
     img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
     
-    # 3. Các hiệu ứng màu sắc
     if params['denoise'] > 0:
         h_val = params['denoise']
         img_bgr = cv2.fastNlMeansDenoisingColored(img_bgr, None, h_val, h_val, 7, 21)
-
     if params['smooth'] > 0:
         d = 5
         sigma = int(params['smooth'] * 2) + 10
         img_bgr = cv2.bilateralFilter(img_bgr, d=d, sigmaColor=sigma, sigmaSpace=sigma)
-
     if params['dehaze'] > 0:
         lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
         l_c, a_c, b_c = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=1.0 + (params['dehaze']/10.0), tileGridSize=(8,8))
         l_c = clahe.apply(l_c)
         img_bgr = cv2.cvtColor(cv2.merge((l_c, a_c, b_c)), cv2.COLOR_LAB2BGR)
-        
     if params['temp'] != 0:
         temp = int(params['temp'])
         b_c, g_c, r_c = cv2.split(img_bgr)
@@ -216,37 +200,40 @@ def apply_advanced_effects(base_img, params):
             r_c = cv2.add(r_c, temp)
             b_c = cv2.subtract(b_c, temp)
         img_bgr = cv2.merge([b_c, g_c, r_c])
-
     if params['makeup'] > 0:
         hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
         img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
-
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
-    
     if params['clarity'] > 0:
         img_bgr = apply_clarity(img_bgr, params['clarity'])
     if params['sharp_amount'] > 0:
         img_bgr = apply_super_sharpen(img_bgr, params['sharp_amount'])
 
-    # Gộp lại
     final_bgra = cv2.merge([img_bgr[:,:,0], img_bgr[:,:,1], img_bgr[:,:,2], a])
     img_pil = Image.fromarray(cv2.cvtColor(final_bgra, cv2.COLOR_BGRA2RGBA))
-    
     if params['exposure'] != 1.0:
         img_pil = ImageEnhance.Brightness(img_pil).enhance(params['exposure'])
     if params['contrast'] != 1.0:
         img_pil = ImageEnhance.Contrast(img_pil).enhance(params['contrast'])
-
     return img_pil
 
 def create_print_layout(img_person, size_type):
     PAPER_W, PAPER_H = 1748, 1181 
     bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
-    if "4x6" in size_type:
+    
+    if "5x5" in size_type: # VISA MỸ
+        # 5x5cm ~ 600px ở 300dpi. 
+        # Trên khổ giấy này, để an toàn và không bị cắt mép, 
+        # ta xếp 2 ảnh (đủ dùng cho hồ sơ)
+        target_w, target_h = 600, 600
+        rows, cols = 1, 2
+        start_x, start_y = 200, 290 # Căn giữa tờ giấy
+        gap = 100
+    elif "4x6" in size_type:
         target_w, target_h = 472, 708
         rows, cols = 1, 3
         start_x, start_y = 100, 200
@@ -256,6 +243,7 @@ def create_print_layout(img_person, size_type):
         rows, cols = 2, 4
         start_x, start_y = 100, 100
         gap = 40
+        
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
         for c in range(cols):
@@ -277,12 +265,26 @@ with col1:
     else:
         input_file = st.camera_input("Chụp ảnh ngay")
 
-    st.subheader("2. Cắt & Xoay")
-    size_option = st.radio("Kích thước:", ["4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
-    target_ratio = 3/4 if "3x4" in size_option else 4/6
+    st.subheader("2. Loại ảnh")
+    # CẬP NHẬT MENU SIZE
+    size_option = st.radio("Kích thước:", ["5x5 cm (Visa Mỹ)", "4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
+    
+    # Logic chọn tỷ lệ crop
+    if "Visa Mỹ" in size_option:
+        target_ratio = 1.0 # Vuông
+    elif "3x4" in size_option:
+        target_ratio = 3/4
+    else:
+        target_ratio = 4/6
+    
     manual_rot = st.slider("Chỉnh nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     
     bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"], horizontal=True)
+    
+    # Auto chọn màu trắng nếu là Visa Mỹ (chỉ nhắc nhở trực quan)
+    if "Visa Mỹ" in size_option and bg_name != "Trắng":
+        st.warning("⚠️ Lưu ý: Visa Mỹ bắt buộc nền TRẮNG.")
+
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
 
@@ -299,13 +301,16 @@ with col1:
                     st.session_state.raw_nobg = process_raw_to_nobg(input_file)
                     st.session_state.current_file_key = current_file_key
                 except Exception as e:
-                    st.error(f"Lỗi tải ảnh: {e}. Vui lòng thử ảnh khác.")
+                    st.error(f"Lỗi tải ảnh: {e}")
         
         if 'raw_nobg' in st.session_state:
             final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
             if final_crop:
                 st.session_state.base = final_crop
-                st.caption(f"ℹ️ {debug_info}")
+                if "Visa Mỹ" in size_option:
+                    st.info("ℹ️ Chế độ Visa Mỹ: Đã tự động căn mặt chiếm ~60% khung hình.")
+                else:
+                    st.caption(f"ℹ️ {debug_info}")
             else:
                 st.error(f"Lỗi: {debug_info}")
 
@@ -339,9 +344,7 @@ with col1:
                 st.session_state.val_denoise = 10
                 st.session_state.val_whites = 15
     
-    # --- MỚI: CTRL + T (TRANSFORM) ---
     with st.expander("📐 4. Bố cục (Ctrl + T)", expanded=True):
-        st.caption("Phóng to, thu nhỏ và di chuyển người trong khung.")
         p_zoom = st.slider("Phóng to / Thu nhỏ (Zoom)", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
         p_move_x = st.slider("↔️ Dịch sang Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
         p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
@@ -373,7 +376,6 @@ with col1:
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
-        # Tham số transform
         'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y
     }
 
@@ -389,7 +391,7 @@ with col2:
             final_img.paste(final_person, (0, 0), final_person)
             final_rgb = final_img.convert("RGB")
             
-            st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
+            st.image(final_rgb, width=350, caption="Ảnh hoàn thiện (Đã tối ưu cho in ấn & Upload)")
             st.markdown("---")
             c1, c2 = st.columns(2)
             
@@ -398,7 +400,7 @@ with col2:
             name_mapping = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}
             safe_bg_name = name_mapping.get(bg_name, "custom")
             
-            c1.download_button(label="⬇️ Tải ảnh JPEG", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg")
+            c1.download_button(label="⬇️ Tải ảnh JPEG", data=buf.getvalue(), file_name=f"visa_usa_{safe_bg_name}.jpg", mime="image/jpeg")
 
             if c2.button("🖨️ In ghép khổ A6"):
                 paper = create_print_layout(final_rgb, size_option)
