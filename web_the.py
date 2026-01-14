@@ -343,7 +343,7 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH (ĐÃ SẮP XẾP LẠI) ---
 
-st.markdown('<div class="main-title">📸 STUDIO ẢNH THẺ CHUYÊN NGHIỆP</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn. Chạy: `pip install fpdf`")
 
@@ -526,3 +526,4 @@ with col_result:
         # Màn hình chờ khi chưa có ảnh
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
+
