@@ -5,3 +5,4 @@ Pillow
 numpy<2.0.0
 onnxruntime
 watchdog
+fpdf
