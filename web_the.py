@@ -5,16 +5,17 @@ import numpy as np
 from rembg import remove, new_session
 import io
 import gc
+from fpdf import FPDF # Cần cài thư viện này: pip install fpdf
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.7 - Visa Mỹ", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.8 - Ultimate", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.7 (Chuyên Visa Mỹ)")
-st.caption("Phiên bản V2.7: Thêm chuẩn Visa Mỹ (5x5cm), tỷ lệ mặt chuẩn 50-70%.")
+st.title("📸 Studio Ảnh Thẻ - V2.8 (Full Option)")
+st.caption("Phiên bản V2.8: Tích hợp Ghép Áo (Vest/Sơ mi) & Xuất file PDF chuẩn in.")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -33,12 +34,14 @@ def reset_beauty_params():
     st.session_state.val_zoom = 1.0
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
+    # Reset Áo
+    st.session_state.suit_zoom = 1.0
+    st.session_state.suit_y = 0
     st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
 def resize_image_input(image, max_height=1200):
-    # Tăng giới hạn lên 1200 để đảm bảo ảnh Visa Mỹ nét căng
     w, h = image.size
     if h > max_height:
         ratio = max_height / h
@@ -96,19 +99,13 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
         (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3]) if len(faces_new) > 0 else face_rect
 
-        # --- LOGIC CẮT ẢNH ---
         if target_ratio == 1.0: 
-            # VISA MỸ (VUÔNG)
-            # Yêu cầu: Mặt chiếm 50-69% chiều cao.
-            # zoom_factor = 1.8 -> Mặt chiếm khoảng 55% (An toàn)
             zoom_factor = 1.8  
-            top_offset = 0.55 # Căn mắt hơi cao hơn giữa một chút
+            top_offset = 0.55 
         elif target_ratio < 0.7: 
-            # 3x4 (Dọc)
             zoom_factor = 2.0  
             top_offset = 0.45   
         else:
-            # 4x6 (Dọc)
             zoom_factor = 2.2
             top_offset = 0.5
 
@@ -126,11 +123,10 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. TÍNH NĂNG TRANSFORM (CTRL + T) ---
+# --- 4. TÍNH NĂNG TRANSFORM & GHÉP ÁO ---
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
-    if zoom == 1.0 and move_x == 0 and move_y == 0:
-        return image
+    if zoom == 1.0 and move_x == 0 and move_y == 0: return image
     w, h = image.size
     new_w = int(w * zoom)
     new_h = int(h * zoom)
@@ -142,6 +138,33 @@ def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     paste_y = center_y + move_y
     canvas.paste(img_resized, (paste_x, paste_y), img_resized)
     return canvas
+
+def overlay_suit(person_img, suit_file, suit_zoom, suit_y):
+    """Hàm ghép áo lên người"""
+    if suit_file is None: return person_img
+    
+    suit = Image.open(suit_file).convert("RGBA")
+    pw, ph = person_img.size
+    
+    # Tính toán size áo dựa trên ảnh người
+    # Mặc định áo sẽ rộng bằng vai người (ước lượng)
+    suit_w_base = int(pw * 1.2 * suit_zoom) # 1.2 là hệ số dư vai
+    ratio = suit_w_base / suit.size[0]
+    suit_h_new = int(suit.size[1] * ratio)
+    
+    suit_resized = suit.resize((suit_w_base, suit_h_new), Image.Resampling.LANCZOS)
+    
+    # Vị trí đặt áo (Căn giữa theo chiều ngang, chỉnh Y theo slider)
+    pos_x = (pw - suit_w_base) // 2
+    # Mặc định đặt áo ở dưới cùng ảnh, rồi cộng thêm suit_y
+    pos_y = ph - suit_h_new + 150 + suit_y # +150 để đẩy lên ngực
+    
+    # Tạo layer mới để dán
+    layer = Image.new("RGBA", person_img.size, (0,0,0,0))
+    layer.paste(suit_resized, (pos_x, pos_y), suit_resized)
+    
+    # Gộp ảnh người và ảnh áo
+    return Image.alpha_composite(person_img, layer)
 
 # --- 5. BỘ LỌC NÂNG CAO ---
 
@@ -171,8 +194,15 @@ def apply_clarity(image_bgr, amount=0):
     lab_new = cv2.merge((l_new, a, b))
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
-def apply_advanced_effects(base_img, params):
+def apply_advanced_effects(base_img, params, suit_file=None):
+    # 1. Transform Người trước
     img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
+    
+    # 2. Ghép Áo (Nếu có)
+    if suit_file:
+        img_transformed = overlay_suit(img_transformed, suit_file, params['suit_zoom'], params['suit_y'])
+
+    # 3. Chỉnh màu
     img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
@@ -221,17 +251,45 @@ def apply_advanced_effects(base_img, params):
         img_pil = ImageEnhance.Contrast(img_pil).enhance(params['contrast'])
     return img_pil
 
-def create_print_layout(img_person, size_type):
+def create_pdf(img_person, size_type):
+    """Tạo file PDF để in"""
+    pdf = FPDF(orientation='P', unit='mm', format='A6') # Khổ A6 (105x148mm)
+    pdf.add_page()
+    
+    # Lưu tạm ảnh ra file để chèn vào PDF
+    temp_img_path = "temp_print.jpg"
+    img_person.save(temp_img_path, quality=100, dpi=(300, 300))
+    
+    # Cấu hình size mm
+    if "5x5" in size_type:
+        w_mm, h_mm = 50, 50
+        cols, rows = 2, 2
+        margin_x, margin_y = 2, 5
+    elif "4x6" in size_type:
+        w_mm, h_mm = 40, 60
+        cols, rows = 2, 2
+        margin_x, margin_y = 10, 10
+    else: # 3x4
+        w_mm, h_mm = 30, 40
+        cols, rows = 3, 3
+        margin_x, margin_y = 5, 10
+
+    for r in range(rows):
+        for c in range(cols):
+            x = margin_x + c * (w_mm + 2)
+            y = margin_y + r * (h_mm + 2)
+            pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
+            
+    return pdf.output(dest='S').encode('latin-1')
+
+def create_print_layout_preview(img_person, size_type):
+    """Tạo layout JPEG để xem trước"""
     PAPER_W, PAPER_H = 1748, 1181 
     bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
-    
-    if "5x5" in size_type: # VISA MỸ
-        # 5x5cm ~ 600px ở 300dpi. 
-        # Trên khổ giấy này, để an toàn và không bị cắt mép, 
-        # ta xếp 2 ảnh (đủ dùng cho hồ sơ)
+    if "5x5" in size_type: 
         target_w, target_h = 600, 600
         rows, cols = 1, 2
-        start_x, start_y = 200, 290 # Căn giữa tờ giấy
+        start_x, start_y = 200, 290 
         gap = 100
     elif "4x6" in size_type:
         target_w, target_h = 472, 708
@@ -243,7 +301,6 @@ def create_print_layout(img_person, size_type):
         rows, cols = 2, 4
         start_x, start_y = 100, 100
         gap = 40
-        
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
         for c in range(cols):
@@ -261,30 +318,20 @@ with col1:
     input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
     input_file = None
     if input_method == "📁 Tải ảnh lên":
-        input_file = st.file_uploader("Chọn ảnh từ máy", type=['jpg', 'png', 'jpeg'])
+        input_file = st.file_uploader("Chọn ảnh gốc", type=['jpg', 'png', 'jpeg'])
     else:
         input_file = st.camera_input("Chụp ảnh ngay")
 
     st.subheader("2. Loại ảnh")
-    # CẬP NHẬT MENU SIZE
     size_option = st.radio("Kích thước:", ["5x5 cm (Visa Mỹ)", "4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
-    
-    # Logic chọn tỷ lệ crop
-    if "Visa Mỹ" in size_option:
-        target_ratio = 1.0 # Vuông
-    elif "3x4" in size_option:
-        target_ratio = 3/4
-    else:
-        target_ratio = 4/6
+    if "Visa Mỹ" in size_option: target_ratio = 1.0 
+    elif "3x4" in size_option: target_ratio = 3/4
+    else: target_ratio = 4/6
     
     manual_rot = st.slider("Chỉnh nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     
     bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"], horizontal=True)
-    
-    # Auto chọn màu trắng nếu là Visa Mỹ (chỉ nhắc nhở trực quan)
-    if "Visa Mỹ" in size_option and bg_name != "Trắng":
-        st.warning("⚠️ Lưu ý: Visa Mỹ bắt buộc nền TRẮNG.")
-
+    if "Visa Mỹ" in size_option and bg_name != "Trắng": st.warning("⚠️ Visa Mỹ bắt buộc nền TRẮNG.")
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
 
@@ -296,28 +343,20 @@ with col1:
             gc.collect()
 
         if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
-            with st.spinner('Đang tách nền & tối ưu ảnh...'):
+            with st.spinner('Đang tách nền...'):
                 try:
                     st.session_state.raw_nobg = process_raw_to_nobg(input_file)
                     st.session_state.current_file_key = current_file_key
-                except Exception as e:
-                    st.error(f"Lỗi tải ảnh: {e}")
+                except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
         
         if 'raw_nobg' in st.session_state:
             final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
-            if final_crop:
-                st.session_state.base = final_crop
-                if "Visa Mỹ" in size_option:
-                    st.info("ℹ️ Chế độ Visa Mỹ: Đã tự động căn mặt chiếm ~60% khung hình.")
-                else:
-                    st.caption(f"ℹ️ {debug_info}")
-            else:
-                st.error(f"Lỗi: {debug_info}")
+            if final_crop: st.session_state.base = final_crop
+            else: st.error(f"Lỗi: {debug_info}")
 
     st.markdown("---")
-    
     c_head, c_btn = st.columns([3, 2])
-    with c_head: st.subheader("3. Xử lý ảnh")
+    with c_head: st.subheader("3. Chỉnh sửa")
     with c_btn: st.button("🔄 Reset", on_click=reset_beauty_params)
 
     with st.expander("🤖 AI Style (Tự động)", expanded=False):
@@ -345,23 +384,32 @@ with col1:
                 st.session_state.val_whites = 15
     
     with st.expander("📐 4. Bố cục (Ctrl + T)", expanded=True):
-        p_zoom = st.slider("Phóng to / Thu nhỏ (Zoom)", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
-        p_move_x = st.slider("↔️ Dịch sang Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
+        p_zoom = st.slider("Phóng to / Thu nhỏ", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
+        p_move_x = st.slider("↔️ Dịch Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
         p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
 
-    with st.expander("✨ 5. Công cụ chỉnh sửa", expanded=True):
+    # --- TÍNH NĂNG GHÉP ÁO MỚI ---
+    with st.expander("👔 5. Ghép Áo (Virtual Suit)", expanded=True):
+        st.caption("Tải ảnh áo vest/sơ mi (định dạng PNG nền trong suốt) lên đây.")
+        suit_file = st.file_uploader("Chọn file áo (PNG)", type=['png'])
+        if suit_file:
+            p_suit_zoom = st.slider("Chỉnh Size Áo", 0.5, 1.5, st.session_state.get('suit_zoom', 1.0), 0.05, key="suit_zoom")
+            p_suit_y = st.slider("Chỉnh Áo Lên / Xuống", -200, 200, st.session_state.get('suit_y', 0), 5, key="suit_y")
+        else:
+            p_suit_zoom = 1.0
+            p_suit_y = 0
+
+    with st.expander("✨ 6. Công cụ chỉnh màu", expanded=True):
         st.markdown("**Chi tiết & Độ nét**")
-        p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
+        p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
         p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
         p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
         p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
 
         st.markdown("**Ánh sáng & Màu sắc**")
         col_b, col_w = st.columns(2)
-        with col_b:
-            p_blacks = st.slider("Làm sâu màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
-        with col_w:
-            p_whites = st.slider("Làm rực màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
+        with col_b: p_blacks = st.slider("Làm sâu màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
+        with col_w: p_whites = st.slider("Làm rực màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
             
         p_exposure = st.slider("Độ sáng tổng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
@@ -376,39 +424,45 @@ with col1:
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
-        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y
+        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
+        # Suit params
+        'suit_zoom': p_suit_zoom, 'suit_y': p_suit_y
     }
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
     if 'base' in st.session_state and st.session_state.base:
         try:
-            with st.spinner("Đang xử lý..."):
-                final_person = apply_advanced_effects(st.session_state.base, params)
+            with st.spinner("Đang xử lý (Ghép áo & chỉnh màu)..."):
+                final_person = apply_advanced_effects(st.session_state.base, params, suit_file)
             
             w, h = final_person.size
             final_img = Image.new("RGBA", (w, h), bg_val)
             final_img.paste(final_person, (0, 0), final_person)
             final_rgb = final_img.convert("RGB")
             
-            st.image(final_rgb, width=350, caption="Ảnh hoàn thiện (Đã tối ưu cho in ấn & Upload)")
-            st.markdown("---")
-            c1, c2 = st.columns(2)
+            # --- VIEW SO SÁNH ---
+            tab1, tab2 = st.tabs(["Ảnh Kết Quả", "Layout In"])
             
-            buf = io.BytesIO()
-            final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
-            name_mapping = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}
-            safe_bg_name = name_mapping.get(bg_name, "custom")
+            with tab1:
+                st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
+                
+                c1, c2 = st.columns(2)
+                buf = io.BytesIO()
+                final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
+                safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}.get(bg_name, "custom")
+                c1.download_button(label="⬇️ Tải Ảnh JPG", data=buf.getvalue(), file_name=f"ket_qua_{safe_bg_name}.jpg", mime="image/jpeg")
             
-            c1.download_button(label="⬇️ Tải ảnh JPEG", data=buf.getvalue(), file_name=f"visa_usa_{safe_bg_name}.jpg", mime="image/jpeg")
+            with tab2:
+                st.caption("Xem trước khi in (A6)")
+                preview_paper = create_print_layout_preview(final_rgb, size_option)
+                st.image(preview_paper, use_container_width=True)
+                
+                # --- NÚT XUẤT PDF MỚI ---
+                pdf_data = create_pdf(final_rgb, size_option)
+                st.download_button(label="📄 Tải File PDF (In Chuẩn)", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf")
 
-            if c2.button("🖨️ In ghép khổ A6"):
-                paper = create_print_layout(final_rgb, size_option)
-                st.image(paper, caption="Layout in A6", use_container_width=True)
-                buf_p = io.BytesIO()
-                paper.save(buf_p, format="JPEG", quality=100, dpi=(300, 300))
-                st.download_button("⬇️ Tải file in", buf_p.getvalue(), "layout_in_A6.jpg", "image/jpeg", key='dl_print')
         except Exception as e:
-            st.error(f"Lỗi: {e}. Vui lòng thử Reset.")
+            st.error(f"Lỗi: {e}. Thử Reset hoặc chọn ảnh khác.")
     else:
         st.info("👈 Hãy chọn ảnh ở cột bên trái để bắt đầu xử lý.")
