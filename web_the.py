@@ -14,18 +14,18 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.14 - High Beauty", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.15 - Auto Level", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.14 (Auto Cao Cấp)")
+st.title("📸 Studio Ảnh Thẻ - V2.15 (Auto 2 Cấp Độ)")
 if not HAS_FPDF:
     st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
 
-# --- 2. HÀM RESET & AUTO ĐẸP ---
+# --- 2. HÀM RESET & AUTO ĐẸP (LOGIC MỚI) ---
 
 def reset_beauty_params():
     """Đưa về 0 hết"""
@@ -44,25 +44,55 @@ def reset_beauty_params():
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
     st.session_state.val_edge_soft = 0
-    st.session_state.ai_enabled = False
+    st.session_state.auto_level = 0 # Reset level auto
 
-def set_basic_beauty():
-    """Thiết lập thông số làm đẹp Auto (Mức cao)"""
-    st.session_state.val_smooth = 10       # Mịn da (Tăng từ 6 -> 10)
-    st.session_state.val_makeup = 4        # Hồng hào
-    st.session_state.val_exposure = 1.2    # Sáng tổng (Tăng từ 1.05 -> 1.2)
-    st.session_state.val_whites = 12       # Rực trắng
-    st.session_state.val_blacks = 4        # Sâu đen
-    st.session_state.val_sharp_amount = 2  # Sắc nét
-    st.session_state.val_edge_soft = 2     # Mềm tóc
+def set_auto_beauty():
+    """
+    Logic Auto 3 bước:
+    - Click 1: Level 1 (Cơ bản)
+    - Click 2: Level 2 (Nhân đôi thông số)
+    - Click 3: Reset
+    """
+    # Khởi tạo nếu chưa có
+    if 'auto_level' not in st.session_state:
+        st.session_state.auto_level = 0
     
-    # Các thông số khác về mặc định
+    # Tăng level: 0 -> 1 -> 2 -> 0
+    current_level = st.session_state.auto_level
+    next_level = (current_level + 1) % 3
+    st.session_state.auto_level = next_level
+
+    if next_level == 1:
+        st.toast("✨ Auto Level 1: Làm đẹp nhẹ nhàng")
+        st.session_state.val_smooth = 5
+        st.session_state.val_makeup = 2
+        st.session_state.val_exposure = 1.05
+        st.session_state.val_whites = 6
+        st.session_state.val_blacks = 4
+        st.session_state.val_sharp_amount = 2
+        st.session_state.val_edge_soft = 2
+        
+    elif next_level == 2:
+        st.toast("✨✨ Auto Level 2: Làm đẹp rực rỡ (x2)")
+        st.session_state.val_smooth = 10       # 5 x 2
+        st.session_state.val_makeup = 4        # 2 x 2
+        st.session_state.val_exposure = 1.10   # Tăng thêm 5% nữa
+        st.session_state.val_whites = 12       # 6 x 2
+        st.session_state.val_blacks = 8        # 4 x 2
+        st.session_state.val_sharp_amount = 4  # 2 x 2
+        st.session_state.val_edge_soft = 4     # 2 x 2
+        
+    else:
+        st.toast("🔄 Đã tắt Auto (Về mặc định)")
+        reset_beauty_params()
+        return
+
+    # Các thông số giữ nguyên cho cả 2 level
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_clarity = 0
     st.session_state.val_denoise = 0
     st.session_state.val_dehaze = 0
-    st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
 
@@ -358,7 +388,11 @@ with col1:
     with c_head: st.subheader("3. Chỉnh sửa")
     with c_btn: 
         b1, b2 = st.columns(2)
-        with b1: st.button("✨ Auto Đẹp", on_click=set_basic_beauty, help="Mịn 10, Hồng 4, Sáng 1.2, Trắng 12, Đen 4, Nét 2, Mềm tóc 2")
+        # Nút Auto logic mới (x1 và x2)
+        current_lvl = st.session_state.get('auto_level', 0)
+        label_auto = f"✨ Auto (Lv {current_lvl})" if current_lvl > 0 else "✨ Auto Đẹp"
+        
+        with b1: st.button(label_auto, on_click=set_auto_beauty, help="Ấn 1 lần: Đẹp nhẹ. Ấn 2 lần: Đẹp rực rỡ (x2). Ấn 3 lần: Reset.")
         with b2: st.button("🔄 Reset", on_click=reset_beauty_params)
 
     with st.expander("🤖 AI Style (Tự động)", expanded=False):
@@ -423,6 +457,10 @@ with col1:
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
+    
+    # --- TÍNH NĂNG SO SÁNH (COMPARE) ---
+    show_compare = st.checkbox("👁️ So sánh Trước / Sau", value=False)
+
     if 'base' in st.session_state and st.session_state.base:
         try:
             with st.spinner("Đang xử lý..."):
@@ -436,8 +474,16 @@ with col2:
             tab1, tab2 = st.tabs(["Ảnh Kết Quả", "Layout In"])
             
             with tab1:
-                st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
+                if show_compare:
+                    c_before, c_after = st.columns(2)
+                    with c_before:
+                        st.image(st.session_state.base, caption="Ảnh Gốc (Đã tách nền)", use_container_width=True)
+                    with c_after:
+                        st.image(final_rgb, caption="Ảnh Sau Chỉnh Sửa", use_container_width=True)
+                else:
+                    st.image(final_rgb, width=350, caption="Ảnh hoàn thiện")
                 
+                st.markdown("---")
                 c1, c2 = st.columns(2)
                 buf = io.BytesIO()
                 final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
