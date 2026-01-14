@@ -14,13 +14,13 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.12 - Auto Beauty", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.13 - Auto Updated", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.12 (Nút Auto Đẹp)")
+st.title("📸 Studio Ảnh Thẻ - V2.13 (Auto Updated)")
 if not HAS_FPDF:
     st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
@@ -47,15 +47,16 @@ def reset_beauty_params():
     st.session_state.ai_enabled = False
 
 def set_basic_beauty():
-    """Thiết lập thông số làm đẹp cơ bản theo yêu cầu"""
-    st.session_state.val_smooth = 2
-    st.session_state.val_makeup = 2
-    st.session_state.val_exposure = 1.05
-    st.session_state.val_whites = 9
-    st.session_state.val_blacks = 4
-    st.session_state.val_sharp_amount = 2
-    st.session_state.val_edge_soft = 2
-    # Các thông số khác giữ nguyên hoặc về mặc định nếu cần
+    """Thiết lập thông số làm đẹp Auto theo yêu cầu mới"""
+    st.session_state.val_smooth = 6        # Mịn da
+    st.session_state.val_makeup = 4        # Hồng hào
+    st.session_state.val_exposure = 1.05   # Sáng tổng
+    st.session_state.val_whites = 12       # Rực trắng
+    st.session_state.val_blacks = 4        # Sâu đen
+    st.session_state.val_sharp_amount = 2  # Sắc nét
+    st.session_state.val_edge_soft = 2     # Mềm tóc
+    
+    # Các thông số khác về mặc định
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_clarity = 0
@@ -352,12 +353,12 @@ with col1:
 
     st.markdown("---")
     
-    # --- PHẦN NÚT BẤM (ĐÃ SỬA) ---
+    # --- PHẦN NÚT BẤM ---
     c_head, c_btn = st.columns([3, 2])
     with c_head: st.subheader("3. Chỉnh sửa")
     with c_btn: 
         b1, b2 = st.columns(2)
-        with b1: st.button("✨ Auto Đẹp", on_click=set_basic_beauty, help="Mịn da +2, Hồng +2, Sáng +1.05, Trắng +9, Đen +4, Nét +2, Mềm tóc +2")
+        with b1: st.button("✨ Auto Đẹp", on_click=set_basic_beauty, help="Mịn 6, Hồng 4, Sáng 1.05, Trắng 12, Đen 4, Nét 2, Mềm tóc 2")
         with b2: st.button("🔄 Reset", on_click=reset_beauty_params)
 
     with st.expander("🤖 AI Style (Tự động)", expanded=False):
