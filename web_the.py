@@ -7,13 +7,13 @@ import io
 import math
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ Pro Max", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ STH", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - Pro Max (STH)")
+st.title("📸 Studio Ảnh Thẻ - (STH)")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -335,3 +335,4 @@ with col2:
             
     else:
         st.info("👈 Chọn nguồn ảnh (Tải lên hoặc Chụp) để bắt đầu.")
+
