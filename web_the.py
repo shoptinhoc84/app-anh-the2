@@ -7,7 +7,6 @@ import io
 import gc
 
 # --- XỬ LÝ LỖI THƯ VIỆN FPDF ---
-# Nếu chưa cài fpdf, app vẫn chạy bình thường nhưng sẽ tắt tính năng in PDF
 try:
     from fpdf import FPDF
     HAS_FPDF = True
@@ -15,13 +14,13 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.9 - Clean", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.10 - Fix Print", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.9 (Bản Ổn Định)")
+st.title("📸 Studio Ảnh Thẻ - V2.10 (Fix Lỗi In)")
 if not HAS_FPDF:
     st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
@@ -45,7 +44,6 @@ def reset_beauty_params():
     st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
-
 def resize_image_input(image, max_height=1200):
     w, h = image.size
     if h > max_height:
@@ -129,7 +127,6 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         return None, str(e), 0
 
 # --- 4. TÍNH NĂNG TRANSFORM (CTRL + T) ---
-
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
     w, h = image.size
@@ -145,7 +142,6 @@ def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     return canvas
 
 # --- 5. BỘ LỌC NÂNG CAO ---
-
 def adjust_levels(image, blacks=0, whites=0):
     if blacks == 0 and whites == 0: return image
     in_black = blacks
@@ -173,10 +169,8 @@ def apply_clarity(image_bgr, amount=0):
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
 def apply_advanced_effects(base_img, params):
-    # 1. Transform (Ctrl+T)
     img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
     
-    # 2. Chuyển đổi màu & Hiệu ứng
     img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
@@ -226,10 +220,11 @@ def apply_advanced_effects(base_img, params):
     return img_pil
 
 def create_pdf(img_person, size_type):
-    """Tạo file PDF để in (Chỉ chạy khi có thư viện fpdf)"""
+    """Tạo file PDF - FIX LỖI PAGE FORMAT A6"""
     if not HAS_FPDF: return None
     
-    pdf = FPDF(orientation='P', unit='mm', format='A6')
+    # --- SỬA LỖI Ở ĐÂY: Thay 'A6' bằng tuple kích thước (105, 148) ---
+    pdf = FPDF(orientation='P', unit='mm', format=(105, 148))
     pdf.add_page()
     
     temp_img_path = "temp_print.jpg"
@@ -283,7 +278,6 @@ def create_print_layout_preview(img_person, size_type):
     return bg_paper
 
 # --- 6. GIAO DIỆN CHÍNH ---
-
 col1, col2 = st.columns([1, 2.2])
 
 with col1:
