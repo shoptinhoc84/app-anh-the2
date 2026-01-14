@@ -6,25 +6,25 @@ from rembg import remove, new_session
 import io
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.2 - Clarity Update", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.3 - Fix Crash", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - Pro Max (Super Sharp Edition)")
+st.title("📸 Studio Ảnh Thẻ - Pro Max (Anti-Crash)")
+st.caption("Phiên bản V2.3: Tự động tối ưu dung lượng ảnh để tránh sập khi chỉnh sửa.")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
 def reset_beauty_params():
-    """Đưa toàn bộ thông số về mặc định"""
     st.session_state.val_smooth = 0
     st.session_state.val_makeup = 0
     st.session_state.val_exposure = 1.0
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_sharp_amount = 0 
-    st.session_state.val_clarity = 0      # <--- MỚI: Reset Clarity
+    st.session_state.val_clarity = 0
     st.session_state.val_denoise = 0      
     st.session_state.val_blacks = 0       
     st.session_state.val_whites = 0       
@@ -32,6 +32,15 @@ def reset_beauty_params():
     st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI (CORE) ---
+
+def resize_image_input(image, max_height=1280):
+    """Thu nhỏ ảnh nếu quá lớn để tránh tràn RAM"""
+    w, h = image.size
+    if h > max_height:
+        ratio = max_height / h
+        new_w = int(w * ratio)
+        return image.resize((new_w, max_height), Image.Resampling.LANCZOS)
+    return image
 
 def rotate_image(image, angle):
     (h, w) = image.shape[:2]
@@ -64,6 +73,9 @@ def get_face_angle(gray_img, face_rect):
 
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
+    # --- FIX CRASH: Resize ảnh ngay lập tức ---
+    image = resize_image_input(image, max_height=1280)
+    
     session = get_rembg_session()
     no_bg_pil = remove(image, session=session, alpha_matting=True)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
@@ -123,7 +135,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. BỘ LỌC NÂNG CAO (MỚI: CLARITY) ---
+# --- 4. BỘ LỌC NÂNG CAO (FIXED SHARPEN & SAFE CLARITY) ---
 
 def adjust_levels(image, blacks=0, whites=0):
     if blacks == 0 and whites == 0: return image
@@ -155,22 +167,28 @@ def apply_super_sharpen(image, amount=0):
 
 def apply_clarity(image, amount=0):
     """
-    Tăng cường độ rõ nét (Local Contrast)
-    Giúp ảnh có độ sâu hơn mà không bị nhiễu như Sharpen.
+    Tăng cường độ rõ nét (Local Contrast) - Safe Mode
+    Dùng float32 để tránh lỗi tính toán gây crash
     """
     if amount == 0: return image
     
-    # Chuyển đổi sang float để tính toán không bị mất dữ liệu
-    # Sử dụng GaussianBlur bán kính lớn để tách lớp cấu trúc
-    kernel_size = 25 # Bán kính mờ (cần số lẻ)
-    blurred = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
+    # Convert sang float để tính toán an toàn
+    img_float = image.astype(np.float32)
     
-    # Công thức: Original + (Original - Blurred) * amount
-    # Tương đương: Original * (1 + alpha) + Blurred * (-alpha)
-    alpha = amount / 30.0 # Hệ số cường độ
+    kernel_size = 25 
+    blurred = cv2.GaussianBlur(img_float, (kernel_size, kernel_size), 0)
     
-    output = cv2.addWeighted(image, 1.0 + alpha, blurred, -alpha, 0)
-    return output
+    alpha = amount / 30.0 
+    
+    # Công thức Unsharp Mask thủ công trên float
+    # output = original + (original - blurred) * alpha
+    detail = img_float - blurred
+    sharpened = img_float + detail * alpha
+    
+    # Clip giá trị về 0-255 và convert lại sang uint8
+    sharpened = np.clip(sharpened, 0, 255).astype(np.uint8)
+    
+    return sharpened
 
 def apply_denoise(image, strength=0):
     if strength == 0: return image
@@ -238,8 +256,8 @@ def apply_advanced_effects(base_img, params):
     if params['blacks'] > 0 or params['whites'] > 0:
         img_cv = adjust_levels(img_cv, params['blacks'], params['whites'])
     
-    # 7. SUPER SHARPEN & CLARITY
-    if params['clarity'] > 0:  # <--- MỚI: Áp dụng Clarity
+    # 7. SUPER SHARPEN & CLARITY (Đã fix lỗi crash)
+    if params['clarity'] > 0:
         img_cv = apply_clarity(img_cv, params['clarity'])
         
     if params['sharp_amount'] > 0:
@@ -307,7 +325,7 @@ with col1:
     if input_file:
         current_file_key = f"{input_file.name}_{input_file.size}"
         if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
-            with st.spinner('Đang tách nền & nhận diện...'):
+            with st.spinner('Đang tách nền & tối ưu ảnh...'):
                 st.session_state.raw_nobg = process_raw_to_nobg(input_file)
                 st.session_state.current_file_key = current_file_key
         
@@ -337,7 +355,7 @@ with col1:
                 st.session_state.val_exposure = 1.05
                 st.session_state.val_contrast = 1.15
                 st.session_state.val_sharp_amount = 20
-                st.session_state.val_clarity = 15 # Nam giới cần độ rõ nét cao
+                st.session_state.val_clarity = 15
                 st.session_state.val_denoise = 5
                 st.session_state.val_blacks = 10
                 st.session_state.val_whites = 5
@@ -347,7 +365,7 @@ with col1:
                 st.session_state.val_exposure = 1.1
                 st.session_state.val_contrast = 1.05
                 st.session_state.val_sharp_amount = 10
-                st.session_state.val_clarity = 5  # Nữ giới cần mềm mại hơn
+                st.session_state.val_clarity = 5
                 st.session_state.val_denoise = 10
                 st.session_state.val_whites = 15
 
@@ -357,7 +375,6 @@ with col1:
         
         p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount", help="Tăng độ sắc cạnh các đường nét nhỏ")
         
-        # --- MỚI: Slider Clarity ---
         p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity", help="Tăng độ sâu và tương phản khối cho ảnh")
         
         p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
@@ -381,7 +398,7 @@ with col1:
     params = {
         'smooth': p_smooth, 'makeup': p_makeup,
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
-        'sharp_amount': p_sharp_amount, 'clarity': p_clarity, # <---
+        'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze,
         'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise
     }
