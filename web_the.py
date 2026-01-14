@@ -7,14 +7,14 @@ import io
 import gc
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.5 - Color Fix", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.6 - Ctrl+T", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.5 (Chuẩn Màu)")
-st.caption("Phiên bản V2.5: Đã sửa lỗi chỉnh màu Đen/Trắng bị đen thui hoặc sai màu.")
+st.title("📸 Studio Ảnh Thẻ - V2.6 (Ctrl + T)")
+st.caption("Phiên bản V2.6: Thêm tính năng Zoom & Di chuyển bố cục như Photoshop.")
 st.markdown("---")
 
 # --- 2. HÀM RESET ---
@@ -30,6 +30,10 @@ def reset_beauty_params():
     st.session_state.val_blacks = 0       
     st.session_state.val_whites = 0       
     st.session_state.val_dehaze = 0
+    # Reset cả phần Ctrl + T
+    st.session_state.val_zoom = 1.0
+    st.session_state.val_move_x = 0
+    st.session_state.val_move_y = 0
     st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
@@ -108,33 +112,52 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. BỘ LỌC NÂNG CAO (ĐÃ SỬA LỖI LEVELS) ---
+# --- 4. TÍNH NĂNG TRANSFORM (CTRL + T) ---
+
+def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
+    """
+    Phóng to/Thu nhỏ và di chuyển ảnh trong khung (Canvas)
+    """
+    if zoom == 1.0 and move_x == 0 and move_y == 0:
+        return image
+
+    w, h = image.size
+    
+    # 1. Tính kích thước mới
+    new_w = int(w * zoom)
+    new_h = int(h * zoom)
+    
+    # 2. Resize ảnh (giữ chất lượng cao nhất)
+    img_resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    
+    # 3. Tạo canvas trống cùng kích thước gốc
+    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    
+    # 4. Tính toán vị trí dán (Căn giữa + Dịch chuyển)
+    # Tọa độ gốc (chưa dịch) là để ảnh nằm giữa
+    center_x = (w - new_w) // 2
+    center_y = (h - new_h) // 2
+    
+    # Áp dụng dịch chuyển từ slider
+    paste_x = center_x + move_x
+    paste_y = center_y + move_y
+    
+    # 5. Dán ảnh đã resize vào canvas
+    canvas.paste(img_resized, (paste_x, paste_y), img_resized)
+    
+    return canvas
+
+# --- 5. BỘ LỌC NÂNG CAO ---
 
 def adjust_levels(image, blacks=0, whites=0):
-    """
-    Hàm chỉnh Levels đã sửa lỗi.
-    Sử dụng float32 để tránh tràn số (âm biến thành dương) gây lỗi đen thui.
-    """
     if blacks == 0 and whites == 0: return image
-    
-    # Chuyển đổi tham số đầu vào
-    in_black = blacks # Giá trị đen (cắt vùng tối)
-    in_white = 255 - whites # Giá trị trắng (cắt vùng sáng)
-    
-    # Đảm bảo an toàn logic
+    in_black = blacks
+    in_white = 255 - whites
     if in_black >= in_white: in_black = in_white - 1
-
-    # Tạo bảng tham chiếu (LUT) bằng số thực (float)
     lut = np.arange(256, dtype=np.float32)
-    
-    # Công thức Levels: (Pixel - InBlack) / (InWhite - InBlack) * 255
     scale = 255.0 / (in_white - in_black)
     lut = (lut - in_black) * scale
-    
-    # Cắt giá trị thừa và chuyển về số nguyên dương (uint8)
     lut = np.clip(lut, 0, 255).astype(np.uint8)
-    
-    # Áp dụng vào ảnh
     return cv2.LUT(image, lut)
 
 def apply_super_sharpen(image, amount=0):
@@ -153,22 +176,29 @@ def apply_clarity(image_bgr, amount=0):
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
 def apply_advanced_effects(base_img, params):
-    img_bgra = cv2.cvtColor(np.array(base_img), cv2.COLOR_RGBA2BGRA)
+    # Bước 1: Áp dụng Transform (Ctrl+T) trước
+    img_transformed = apply_transform(
+        base_img, 
+        params['zoom'], 
+        params['move_x'], 
+        params['move_y']
+    )
+    
+    # Bước 2: Chuyển sang OpenCV để chỉnh màu
+    img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
     
-    # 1. Denoise
+    # 3. Các hiệu ứng màu sắc
     if params['denoise'] > 0:
         h_val = params['denoise']
         img_bgr = cv2.fastNlMeansDenoisingColored(img_bgr, None, h_val, h_val, 7, 21)
 
-    # 2. Smooth
     if params['smooth'] > 0:
         d = 5
         sigma = int(params['smooth'] * 2) + 10
         img_bgr = cv2.bilateralFilter(img_bgr, d=d, sigmaColor=sigma, sigmaSpace=sigma)
 
-    # 3. Dehaze
     if params['dehaze'] > 0:
         lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
         l_c, a_c, b_c = cv2.split(lab)
@@ -176,7 +206,6 @@ def apply_advanced_effects(base_img, params):
         l_c = clahe.apply(l_c)
         img_bgr = cv2.cvtColor(cv2.merge((l_c, a_c, b_c)), cv2.COLOR_LAB2BGR)
         
-    # 4. Temp
     if params['temp'] != 0:
         temp = int(params['temp'])
         b_c, g_c, r_c = cv2.split(img_bgr)
@@ -188,7 +217,6 @@ def apply_advanced_effects(base_img, params):
             b_c = cv2.subtract(b_c, temp)
         img_bgr = cv2.merge([b_c, g_c, r_c])
 
-    # 5. Makeup
     if params['makeup'] > 0:
         hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
         h_c, s_c, v_c = cv2.split(hsv)
@@ -196,12 +224,9 @@ def apply_advanced_effects(base_img, params):
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
         img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
 
-    # 6. LEVELS (Đã sửa lỗi)
-    # Lưu ý: Chỉ áp dụng lên kênh màu, không áp dụng lên kênh Alpha (nền trong suốt)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     
-    # 7. Clarity & Sharpen
     if params['clarity'] > 0:
         img_bgr = apply_clarity(img_bgr, params['clarity'])
     if params['sharp_amount'] > 0:
@@ -239,7 +264,7 @@ def create_print_layout(img_person, size_type):
             bg_paper.paste(img_resized, (x, y))
     return bg_paper
 
-# --- 5. GIAO DIỆN CHÍNH ---
+# --- 6. GIAO DIỆN CHÍNH ---
 
 col1, col2 = st.columns([1, 2.2])
 
@@ -313,25 +338,32 @@ with col1:
                 st.session_state.val_clarity = 5
                 st.session_state.val_denoise = 10
                 st.session_state.val_whites = 15
+    
+    # --- MỚI: CTRL + T (TRANSFORM) ---
+    with st.expander("📐 4. Bố cục (Ctrl + T)", expanded=True):
+        st.caption("Phóng to, thu nhỏ và di chuyển người trong khung.")
+        p_zoom = st.slider("Phóng to / Thu nhỏ (Zoom)", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
+        p_move_x = st.slider("↔️ Dịch sang Trái / Phải", -100, 100, st.session_state.get('val_move_x', 0), 1, key="val_move_x")
+        p_move_y = st.slider("↕️ Dịch Lên / Xuống", -100, 100, st.session_state.get('val_move_y', 0), 1, key="val_move_y")
 
-    with st.expander("✨ Công cụ chỉnh sửa", expanded=True):
-        st.markdown("**1. Chi tiết & Độ nét**")
+    with st.expander("✨ 5. Công cụ chỉnh sửa", expanded=True):
+        st.markdown("**Chi tiết & Độ nét**")
         p_sharp_amount = st.slider("Độ sắc nét (Super Sharp)", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
         p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
         p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
         p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
 
-        st.markdown("**2. Ánh sáng & Màu sắc**")
+        st.markdown("**Ánh sáng & Màu sắc**")
         col_b, col_w = st.columns(2)
         with col_b:
-            p_blacks = st.slider("Làm sâu màu Đen (Levels)", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks", help="Tăng độ tương phản vùng tối (làm đen tóc, áo)")
+            p_blacks = st.slider("Làm sâu màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
         with col_w:
-            p_whites = st.slider("Làm rực màu Trắng (Levels)", 0, 50, st.session_state.get('val_whites', 0), key="val_whites", help="Tăng độ sáng vùng sáng (làm sáng da, sơ mi trắng)")
+            p_whites = st.slider("Làm rực màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
             
         p_exposure = st.slider("Độ sáng tổng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
         
-        st.markdown("**3. Da & Trang điểm**")
+        st.markdown("**Da & Trang điểm**")
         p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
         p_makeup = st.slider("Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         p_temp = st.slider("Nhiệt độ màu", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
@@ -340,14 +372,16 @@ with col1:
         'smooth': p_smooth, 'makeup': p_makeup,
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
-        'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise
+        'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
+        # Tham số transform
+        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y
     }
 
 with col2:
     st.header(f"🖼 Kết quả ({size_option})")
     if 'base' in st.session_state and st.session_state.base:
         try:
-            with st.spinner("Đang áp dụng hiệu ứng..."):
+            with st.spinner("Đang xử lý..."):
                 final_person = apply_advanced_effects(st.session_state.base, params)
             
             w, h = final_person.size
