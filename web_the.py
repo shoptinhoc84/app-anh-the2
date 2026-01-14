@@ -14,13 +14,13 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH & CACHE ---
-st.set_page_config(page_title="Studio Ảnh Thẻ V2.10 - Fix Print", layout="wide")
+st.set_page_config(page_title="Studio Ảnh Thẻ V2.11 - Soft Edge", layout="wide")
 
 @st.cache_resource
 def get_rembg_session():
     return new_session("u2netp")
 
-st.title("📸 Studio Ảnh Thẻ - V2.10 (Fix Lỗi In)")
+st.title("📸 Studio Ảnh Thẻ - V2.11 (Viền Tóc Mềm)")
 if not HAS_FPDF:
     st.warning("⚠️ Bạn chưa cài thư viện xuất PDF. Hãy chạy lệnh: `pip install fpdf` để mở khóa tính năng in.")
 st.markdown("---")
@@ -41,9 +41,11 @@ def reset_beauty_params():
     st.session_state.val_zoom = 1.0
     st.session_state.val_move_x = 0
     st.session_state.val_move_y = 0
+    st.session_state.val_edge_soft = 0 # Reset độ mềm viền
     st.session_state.ai_enabled = False
 
 # --- 3. CÁC HÀM XỬ LÝ ẢNH CỐT LÕI ---
+
 def resize_image_input(image, max_height=1200):
     w, h = image.size
     if h > max_height:
@@ -78,7 +80,8 @@ def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
-    no_bg_pil = remove(image, session=session, alpha_matting=True)
+    # alpha_matting=True giúp tách tóc tốt hơn ngay từ đầu
+    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
@@ -126,7 +129,8 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
     except Exception as e:
         return None, str(e), 0
 
-# --- 4. TÍNH NĂNG TRANSFORM (CTRL + T) ---
+# --- 4. TÍNH NĂNG TRANSFORM & EDGE SOFT ---
+
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
     w, h = image.size
@@ -141,7 +145,31 @@ def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     canvas.paste(img_resized, (paste_x, paste_y), img_resized)
     return canvas
 
+def apply_edge_softness(image_rgba, strength=0):
+    """
+    Hàm làm mềm viền (Blur kênh Alpha)
+    Giúp tóc hòa vào nền tự nhiên hơn.
+    """
+    if strength == 0: return image_rgba
+    
+    # Chuyển sang mảng numpy
+    img = np.array(image_rgba)
+    
+    # Tách kênh Alpha (kênh thứ 4)
+    alpha = img[:, :, 3]
+    
+    # Làm mờ kênh Alpha
+    # Kernel size phải là số lẻ (3, 5, 7...)
+    k_size = int(strength) * 2 + 1 
+    alpha_blurred = cv2.GaussianBlur(alpha, (k_size, k_size), 0)
+    
+    # Gán ngược lại
+    img[:, :, 3] = alpha_blurred
+    
+    return Image.fromarray(img)
+
 # --- 5. BỘ LỌC NÂNG CAO ---
+
 def adjust_levels(image, blacks=0, whites=0):
     if blacks == 0 and whites == 0: return image
     in_black = blacks
@@ -169,8 +197,14 @@ def apply_clarity(image_bgr, amount=0):
     return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
 
 def apply_advanced_effects(base_img, params):
+    # 1. Transform (Ctrl+T)
     img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
     
+    # 2. LÀM MỀM VIỀN (SOFT EDGE) - Xử lý ngay trên RGBA
+    if params['edge_soft'] > 0:
+        img_transformed = apply_edge_softness(img_transformed, params['edge_soft'])
+
+    # 3. Chuyển đổi màu & Hiệu ứng
     img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
     b, g, r, a = cv2.split(img_bgra)
     img_bgr = cv2.merge([b, g, r])
@@ -211,7 +245,11 @@ def apply_advanced_effects(base_img, params):
     if params['sharp_amount'] > 0:
         img_bgr = apply_super_sharpen(img_bgr, params['sharp_amount'])
 
+    # Gộp lại: Dùng kênh A đã được làm mềm (nếu có)
+    # Lưu ý: img_transformed (RGBA) đang chứa Alpha đã làm mềm.
+    # img_bgra ban đầu được tách từ img_transformed nên biến 'a' ở đây đã là alpha mềm.
     final_bgra = cv2.merge([img_bgr[:,:,0], img_bgr[:,:,1], img_bgr[:,:,2], a])
+    
     img_pil = Image.fromarray(cv2.cvtColor(final_bgra, cv2.COLOR_BGRA2RGBA))
     if params['exposure'] != 1.0:
         img_pil = ImageEnhance.Brightness(img_pil).enhance(params['exposure'])
@@ -220,10 +258,9 @@ def apply_advanced_effects(base_img, params):
     return img_pil
 
 def create_pdf(img_person, size_type):
-    """Tạo file PDF - FIX LỖI PAGE FORMAT A6"""
+    """Tạo file PDF (Khổ 105x148mm)"""
     if not HAS_FPDF: return None
     
-    # --- SỬA LỖI Ở ĐÂY: Thay 'A6' bằng tuple kích thước (105, 148) ---
     pdf = FPDF(orientation='P', unit='mm', format=(105, 148))
     pdf.add_page()
     
@@ -358,6 +395,9 @@ with col1:
     with st.expander("✨ 5. Công cụ chỉnh màu", expanded=True):
         st.markdown("**Chi tiết & Độ nét**")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
+        # THANH TRƯỢT MỚI:
+        p_edge_soft = st.slider("Làm mềm viền tóc (Anti-Alias)", 0, 10, st.session_state.get('val_edge_soft', 0), 1, key="val_edge_soft", help="Kéo lên để viền tóc bớt sắc, hòa vào nền.")
+        
         p_clarity = st.slider("Độ rõ nét (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
         p_dehaze = st.slider("Xóa lớp phủ mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
         p_denoise = st.slider("Giảm nhiễu hạt", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
@@ -380,7 +420,8 @@ with col1:
         'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
         'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
         'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
-        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y
+        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
+        'edge_soft': p_edge_soft # Tham số mới
     }
 
 with col2:
