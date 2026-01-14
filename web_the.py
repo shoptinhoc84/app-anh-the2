@@ -294,7 +294,24 @@ with col2:
         
         buf = io.BytesIO()
         final_rgb.save(buf, format="JPEG", quality=100, dpi=(300, 300))
-        c1.download_button("⬇️ Tải ảnh đơn", buf.getvalue(), f"anh_the_{bg_name}.jpg", "image/jpeg")
+        
+        # --- SỬA LỖI TẢI FILE TRÊN ĐIỆN THOẠI ---
+        # Đổi tên file chứa dấu Tiếng Việt sang Tiếng Anh
+        name_mapping = {
+            "Trắng": "white",
+            "Xanh Chuẩn": "blue_standard",
+            "Xanh Nhạt": "blue_light"
+        }
+        # Nếu không tìm thấy tên thì để mặc định là custom
+        safe_bg_name = name_mapping.get(bg_name, "custom")
+        
+        c1.download_button(
+            label="⬇️ Tải ảnh đơn", 
+            data=buf.getvalue(), 
+            file_name=f"anh_the_{safe_bg_name}.jpg", 
+            mime="image/jpeg"
+        )
+        # ------------------------------------------
 
         if c2.button("🖨️ Xem file in 10x15cm"):
             paper, qty = create_print_layout(final_rgb, size_option)
@@ -305,4 +322,3 @@ with col2:
             
     else:
         st.info("👈 Tải ảnh lên để bắt đầu.")
-
