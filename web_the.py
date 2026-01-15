@@ -48,7 +48,7 @@ st.markdown("""
 def get_rembg_session():
     return new_session("u2netp")
 
-# --- 2. LOGIC HÀM (GIỮ NGUYÊN KHÔNG ĐỔI) ---
+# --- 2. LOGIC HÀM ---
 def reset_beauty_params():
     st.session_state.val_smooth = 0
     st.session_state.val_makeup = 0
@@ -66,6 +66,33 @@ def reset_beauty_params():
     st.session_state.val_move_y = 0
     st.session_state.val_edge_soft = 0
     st.session_state.auto_level = 0
+
+# --- HÀM MỚI: XỬ LÝ PRESET NAM/NỮ (SỬA LỖI CRASH) ---
+def apply_gender_preset():
+    # Chỉ chạy khi key 'gender_radio' đã tồn tại
+    if 'gender_radio' in st.session_state:
+        style = st.session_state.gender_radio
+        if style == "Nam":
+            st.session_state.val_smooth = 5
+            st.session_state.val_makeup = 2
+            st.session_state.val_exposure = 1.05
+            st.session_state.val_contrast = 1.15
+            st.session_state.val_sharp_amount = 20
+            st.session_state.val_clarity = 15
+            st.session_state.val_denoise = 5
+            st.session_state.val_blacks = 10
+            st.session_state.val_whites = 5
+            st.toast("👨 Đã áp dụng mẫu Nam")
+        else:
+            st.session_state.val_smooth = 25
+            st.session_state.val_makeup = 20
+            st.session_state.val_exposure = 1.1
+            st.session_state.val_contrast = 1.05
+            st.session_state.val_sharp_amount = 10
+            st.session_state.val_clarity = 5
+            st.session_state.val_denoise = 10
+            st.session_state.val_whites = 15
+            st.toast("👩 Đã áp dụng mẫu Nữ")
 
 def set_auto_beauty():
     if 'auto_level' not in st.session_state:
@@ -371,7 +398,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.15 - Update UI")
+    st.caption("Phiên bản V2.16 - Fix UI Error")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -434,28 +461,16 @@ with col_tools:
         p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
         p_makeup = st.slider("Trang điểm/Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         st.markdown("---")
+        
+        # --- SỬA LỖI Ở ĐÂY: DÙNG CALLBACK CHO RADIO BUTTON ---
         ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
         if ai_enabled:
-            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], horizontal=True)
-            if gender_style == "Nam":
-                st.session_state.val_smooth = 5
-                st.session_state.val_makeup = 2
-                st.session_state.val_exposure = 1.05
-                st.session_state.val_contrast = 1.15
-                st.session_state.val_sharp_amount = 20
-                st.session_state.val_clarity = 15
-                st.session_state.val_denoise = 5
-                st.session_state.val_blacks = 10
-                st.session_state.val_whites = 5
-            else:
-                st.session_state.val_smooth = 25
-                st.session_state.val_makeup = 20
-                st.session_state.val_exposure = 1.1
-                st.session_state.val_contrast = 1.05
-                st.session_state.val_sharp_amount = 10
-                st.session_state.val_clarity = 5
-                st.session_state.val_denoise = 10
-                st.session_state.val_whites = 15
+            # Khi người dùng chọn, nó sẽ gọi hàm 'apply_gender_preset' ở trên
+            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], 
+                                  horizontal=True, 
+                                  key="gender_radio", 
+                                  on_change=apply_gender_preset)
+            # Đã xóa đoạn code if/else gây lỗi
 
     with tab3:
         st.caption("Căn chỉnh vị trí và độ nét")
@@ -526,4 +541,3 @@ with col_result:
         # Màn hình chờ khi chưa có ảnh
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-
