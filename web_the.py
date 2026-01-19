@@ -6,36 +6,59 @@ from rembg import remove, new_session
 import io
 import gc
 
-# --- XỬ LÝ LỖI THƯ VIỆN FPDF ---
+# --- CẤU HÌNH THƯ VIỆN ---
 try:
     from fpdf import FPDF
     HAS_FPDF = True
 except ImportError:
     HAS_FPDF = False
 
-# --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ Pro", layout="wide", page_icon="📸")
+# --- KIỂM TRA MEDIAPIPE ---
+try:
+    import mediapipe as mp
+    HAS_MEDIAPIPE = True
+    mp_face_detection = mp.solutions.face_detection
+except ImportError:
+    HAS_MEDIAPIPE = False
+
+# --- 1. CẤU HÌNH TRANG ---
+st.set_page_config(page_title="Studio Ảnh Thẻ Pro AI", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
     .main-title {
         font-size: 2.5rem;
-        color: #B22222; /* Đổi màu đỏ đậm cho hợp phong thủy studio */
+        color: #B22222;
         text-align: center;
         font-weight: 800;
         margin-bottom: 10px;
         text-shadow: 2px 2px 4px #cccccc;
     }
     div[data-testid="stButton"] > button:first-child {
-        border-radius: 10px;
+        border-radius: 8px;
         font-weight: bold;
     }
     .image-container {
         border: 3px solid #B22222;
         padding: 10px;
         border-radius: 10px;
-        background-color: #f0f2f6;
+        background-color: #f8f9fa;
         text-align: center;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 5px 5px 0 0;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #FFFFFF;
+        border-top: 2px solid #B22222;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -44,7 +67,8 @@ st.markdown("""
 def get_rembg_session():
     return new_session("u2netp")
 
-# --- 2. LOGIC HÀM ---
+# --- 2. CÁC HÀM XỬ LÝ ẢNH (CORE) ---
+
 def reset_beauty_params():
     st.session_state.val_smooth = 0
     st.session_state.val_makeup = 0
@@ -63,31 +87,6 @@ def reset_beauty_params():
     st.session_state.val_edge_soft = 0
     st.session_state.auto_level = 0
 
-def apply_gender_preset():
-    if 'gender_radio' in st.session_state:
-        style = st.session_state.gender_radio
-        if style == "Nam":
-            st.session_state.val_smooth = 5
-            st.session_state.val_makeup = 2
-            st.session_state.val_exposure = 1.05
-            st.session_state.val_contrast = 1.15
-            st.session_state.val_sharp_amount = 20
-            st.session_state.val_clarity = 15
-            st.session_state.val_denoise = 5
-            st.session_state.val_blacks = 10
-            st.session_state.val_whites = 5
-            st.toast("👨 Đã áp dụng mẫu Nam")
-        else:
-            st.session_state.val_smooth = 25
-            st.session_state.val_makeup = 20
-            st.session_state.val_exposure = 1.1
-            st.session_state.val_contrast = 1.05
-            st.session_state.val_sharp_amount = 10
-            st.session_state.val_clarity = 5
-            st.session_state.val_denoise = 10
-            st.session_state.val_whites = 15
-            st.toast("👩 Đã áp dụng mẫu Nữ")
-
 def set_auto_beauty():
     if 'auto_level' not in st.session_state:
         st.session_state.auto_level = 0
@@ -96,28 +95,29 @@ def set_auto_beauty():
     st.session_state.auto_level = next_level
 
     if next_level == 1:
-        st.toast("✨ Auto Level 1: Nhẹ nhàng")
-        st.session_state.val_smooth = 5
-        st.session_state.val_makeup = 2
+        st.toast("✨ Auto Level 1: Tự nhiên")
+        st.session_state.val_smooth = 8
+        st.session_state.val_makeup = 5
         st.session_state.val_exposure = 1.05
-        st.session_state.val_whites = 6
-        st.session_state.val_blacks = 4
-        st.session_state.val_sharp_amount = 2
+        st.session_state.val_whites = 8
+        st.session_state.val_blacks = 5
+        st.session_state.val_sharp_amount = 5
         st.session_state.val_edge_soft = 2
     elif next_level == 2:
-        st.toast("✨✨ Auto Level 2: Rực rỡ")
-        st.session_state.val_smooth = 10
-        st.session_state.val_makeup = 4
+        st.toast("✨✨ Auto Level 2: Sáng đẹp")
+        st.session_state.val_smooth = 15
+        st.session_state.val_makeup = 10
         st.session_state.val_exposure = 1.10
-        st.session_state.val_whites = 12
-        st.session_state.val_blacks = 8
-        st.session_state.val_sharp_amount = 4
+        st.session_state.val_whites = 15
+        st.session_state.val_blacks = 10
+        st.session_state.val_sharp_amount = 10
         st.session_state.val_edge_soft = 4
     else:
         st.toast("🔄 Đã tắt Auto")
         reset_beauty_params()
         return
-
+    
+    # Reset các thông số không dùng trong auto
     st.session_state.val_contrast = 1.0
     st.session_state.val_temp = 0
     st.session_state.val_clarity = 0
@@ -139,80 +139,137 @@ def rotate_image(image, angle):
     rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
     return rotated
 
-def get_face_angle(gray_img, face_rect):
-    (x, y, w, h) = face_rect
-    roi_gray = gray_img[y:y+h, x:x+w]
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
-    if len(eyes) >= 2:
-        eyes = sorted(eyes, key=lambda e: e[0])
-        p1 = (eyes[0][0] + eyes[0][2]//2, eyes[0][1] + eyes[0][3]//2)
-        p2 = (eyes[-1][0] + eyes[-1][2]//2, eyes[-1][1] + eyes[-1][3]//2)
-        delta_x = p2[0] - p1[0]
-        delta_y = p2[1] - p1[1]
-        if delta_x < w/5: return 0.0
-        return np.degrees(np.arctan2(delta_y, delta_x))
-    return 0.0
-
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
-    image = resize_image_input(image, max_height=1200)
+    image = resize_image_input(image, max_height=1500) # Tăng độ phân giải xử lý
     session = get_rembg_session()
-    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
+    # Tinh chỉnh tham số tách nền để mượt hơn
+    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=5)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
-def crop_final_image(no_bg_img, manual_angle, target_ratio):
+# --- HÀM MỚI: NHẬN DIỆN MẶT BẰNG MEDIAPIPE (THAY CHO HAAR CASCADE) ---
+def detect_face_mediapipe(image_cv, manual_angle=0):
+    """
+    Hàm này dùng AI MediaPipe để tìm khuôn mặt và góc nghiêng của mắt.
+    Trả về: (x, y, w, h), angle_correction
+    """
+    if not HAS_MEDIAPIPE:
+        return None, 0, "Chưa cài MediaPipe"
+
+    img_rgb = cv2.cvtColor(image_cv, cv2.COLOR_BGRA2RGB)
+    h, w = img_rgb.shape[:2]
+
+    # Khởi tạo model MediaPipe (model_selection=0 cho ảnh chụp cận mặt)
+    with mp_face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as face_detection:
+        results = face_detection.process(img_rgb)
+
+        if not results.detections:
+            return None, 0, "Không tìm thấy khuôn mặt (MediaPipe)"
+
+        # Lấy khuôn mặt to nhất (nếu có nhiều người)
+        detection = max(results.detections, key=lambda d: d.location_data.relative_bounding_box.width * d.location_data.relative_bounding_box.height)
+        
+        # 1. Tính toán Bounding Box
+        bbox = detection.location_data.relative_bounding_box
+        x = int(bbox.xmin * w)
+        y = int(bbox.ymin * h)
+        bw = int(bbox.width * w)
+        bh = int(bbox.height * h)
+        
+        # 2. Tính toán góc xoay dựa trên 2 mắt
+        # Keypoint 0: Right Eye, 1: Left Eye (Theo góc nhìn của AI - ngược với người nhìn)
+        kp_right_eye = mp_face_detection.get_key_point(detection, mp_face_detection.FaceKeyPoint.RIGHT_EYE)
+        kp_left_eye = mp_face_detection.get_key_point(detection, mp_face_detection.FaceKeyPoint.LEFT_EYE)
+        
+        # Chuyển về tọa độ pixel
+        re_x, re_y = kp_right_eye.x * w, kp_right_eye.y * h
+        le_x, le_y = kp_left_eye.x * w, kp_left_eye.y * h
+        
+        # Tính góc (Mắt trái AI thực ra là mắt phải của người trong ảnh nếu nhìn đối diện)
+        # atan2(dy, dx)
+        delta_y = re_y - le_y
+        delta_x = re_x - le_x
+        angle = np.degrees(np.arctan2(delta_y, delta_x))
+        
+        # Cộng thêm góc chỉnh tay của người dùng
+        total_angle = angle + manual_angle
+        
+        return (x, y, bw, bh), total_angle, None
+
+def crop_final_image_v3(no_bg_img, manual_angle, target_ratio):
     try:
+        if not HAS_MEDIAPIPE:
+            return None, "Thiếu thư viện MediaPipe. Chạy: pip install mediapipe", 0
+            
         img_working = no_bg_img.copy()
-        gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+        
+        # Lần 1: Phát hiện để xoay thẳng
+        face_rect, auto_angle, err = detect_face_mediapipe(img_working, manual_angle)
+        
+        if err: return None, err, 0
+        
+        # Xoay ảnh nếu cần
+        if abs(auto_angle) > 0.5:
+            img_rotated = rotate_image(img_working, auto_angle)
+        else:
+            img_rotated = img_working
 
-        if len(faces) == 0: return None, "Không tìm thấy khuôn mặt", 0
+        # Lần 2: Phát hiện lại trên ảnh đã xoay để cắt chuẩn xác
+        face_rect_new, _, err_new = detect_face_mediapipe(img_rotated, 0) # Góc 0 vì đã xoay rồi
+        
+        # Nếu lần 2 ko thấy (do xoay bị mất góc), dùng lại tọa độ cũ (chấp nhận lệch xíu)
+        if err_new: 
+            (x, y, w, h) = face_rect 
+        else:
+            (x, y, w, h) = face_rect_new
 
-        face_rect = max(faces, key=lambda f: f[2] * f[3])
-        auto_angle = get_face_angle(gray, face_rect)
-        if abs(auto_angle) < 1.0 or abs(auto_angle) > 20.0: auto_angle = 0.0 
-
-        total_angle = auto_angle + manual_angle
-        img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
-
-        gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
-        faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
-        (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3]) if len(faces_new) > 0 else face_rect
-
-        # --- LOGIC CẮT ẢNH THEO QUỐC GIA ---
+        # --- LOGIC CẮT ẢNH THEO QUỐC GIA (Đã tinh chỉnh cho MediaPipe Box) ---
+        # MediaPipe Box thường ôm sát mặt hơn HaarCascade, nên hệ số Zoom cần lớn hơn xíu
+        
         if target_ratio == 1.0: # 5x5 Visa Mỹ
-            zoom_factor = 1.8  
-            top_offset = 0.55 
-        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn
-            zoom_factor = 1.6  # Mặt to (70-80%)
-            top_offset = 0.50 
-        elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc (NEW)
-            zoom_factor = 1.75 # Mặt vừa phải nhưng to hơn 4x6 thường (60-70%)
-            top_offset = 0.50  # Căn giữa
-        elif target_ratio < 0.7: # 4x6 Thường
             zoom_factor = 2.0  
-            top_offset = 0.45   
+            top_offset = 0.6 
+        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn
+            zoom_factor = 1.8  # Mặt to (70-80%)
+            top_offset = 0.55 
+        elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc
+            zoom_factor = 1.9 
+            top_offset = 0.55  
+        elif target_ratio < 0.7: # 4x6 Thường
+            zoom_factor = 2.2  
+            top_offset = 0.5   
         else: # 3x4
-            zoom_factor = 2.2
-            top_offset = 0.5
+            zoom_factor = 2.4
+            top_offset = 0.55
 
+        # Tính toán vùng cắt
         crop_h = int(h * zoom_factor) 
         crop_w = int(crop_h * target_ratio)
         
         face_center_x = x + w // 2
-        top_y = int(y - (h * top_offset)) 
+        face_center_y = y + h // 2 # MediaPipe box chuẩn tâm hơn
+        
+        # Tính điểm bắt đầu cắt (Top-Left)
+        # top_offset càng lớn thì khoảng trắng trên đầu càng ít (mặt càng đẩy lên cao)
+        top_y = int(y - (h * (top_offset - 0.1))) # Điều chỉnh lại offset do box MediaPipe khác
+        
+        # Căn giữa theo chiều ngang
         left_x = int(face_center_x - crop_w // 2)
 
+        # Tạo canvas trong suốt
         img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
+        
+        # Paste ảnh vào canvas (xử lý tọa độ âm nếu ảnh bị cắt ra ngoài biên)
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
-        return canvas, f"Góc Auto: {auto_angle:.1f}°", total_angle
+        
+        return canvas, f"Góc xoay AI: {auto_angle:.1f}°", auto_angle
+
     except Exception as e:
         return None, str(e), 0
 
+# --- CÁC HÀM HẬU KỲ (GIỮ NGUYÊN) ---
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
     w, h = image.size
@@ -316,6 +373,7 @@ def apply_advanced_effects(base_img, params):
         img_pil = ImageEnhance.Contrast(img_pil).enhance(params['contrast'])
     return img_pil
 
+# --- LOGIC IN ẤN ---
 def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
     pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) # Khổ A6
@@ -331,10 +389,10 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 35, 45
         cols, rows = 2, 3
         margin_x, margin_y = 17, 6 
-    elif "3.3x4.8" in size_type: # Visa Trung Quốc (NEW)
+    elif "3.3x4.8" in size_type: # Visa Trung Quốc
         w_mm, h_mm = 33, 48
-        cols, rows = 2, 2 # Xếp 4 ảnh
-        margin_x, margin_y = 19, 20 # Căn giữa A6
+        cols, rows = 2, 2 
+        margin_x, margin_y = 19, 20
     elif "4x6" in size_type:
         w_mm, h_mm = 40, 60
         cols, rows = 2, 2
@@ -365,8 +423,8 @@ def create_print_layout_preview(img_person, size_type):
         rows, cols = 3, 2
         start_x, start_y = 190, 80
         gap = 40
-    elif "3.3x4.8" in size_type: # Visa Trung Quốc (NEW)
-        target_w, target_h = 390, 567 # 33x48mm @ 300dpi
+    elif "3.3x4.8" in size_type: 
+        target_w, target_h = 390, 567 
         rows, cols = 2, 2
         start_x, start_y = 200, 250
         gap = 40
@@ -390,15 +448,19 @@ def create_print_layout_preview(img_person, size_type):
     return bg_paper
 
 # --- 3. GIAO DIỆN CHÍNH ---
+st.markdown('<div class="main-title">📸 STUDIO ẢNH THẺ PRO AI (V3.0)</div>', unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
+if not HAS_MEDIAPIPE:
+    st.error("🛑 LỖI: Chưa cài thư viện AI MediaPipe. Vui lòng chạy lệnh sau trong Terminal:")
+    st.code("pip install mediapipe")
+    st.stop()
+
 if not HAS_FPDF:
-    st.warning("⚠️ Chưa cài thư viện in ấn. Chạy: `pip install fpdf`")
+    st.warning("⚠️ Chưa cài thư viện in ấn (fpdf). Chạy: `pip install fpdf`")
 
-# --- A. THANH BÊN ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("⚙️ Thiết lập Đầu vào")
-    st.info("Bước 1: Chọn ảnh và loại ảnh")
+    st.header("⚙️ Thiết lập")
     
     input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
     input_file = None
@@ -410,17 +472,16 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
     
-    # --- CẬP NHẬT RADIO SIZE ---
     size_option = st.radio("Chọn cỡ ảnh:", 
                          ["5x5 cm (Visa Mỹ)", 
-                          "3.5x4.5 cm (Visa Úc/Hàn/Châu Âu)", 
-                          "3.3x4.8 cm (Visa Trung Quốc)", # --- MỚI ---
+                          "3.5x4.5 cm (Visa Úc/Hàn/Âu)", 
+                          "3.3x4.8 cm (Visa Trung Quốc)", 
                           "4x6 cm (Hộ chiếu)", 
                           "3x4 cm (Giấy tờ)"])
     
     if "Visa Mỹ" in size_option: target_ratio = 1.0 
-    elif "Visa Úc" in size_option: target_ratio = 3.5/4.5 # ~0.777
-    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8 # ~0.6875
+    elif "Visa Úc" in size_option: target_ratio = 3.5/4.5
+    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
     
@@ -428,10 +489,9 @@ with st.sidebar:
     bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
     bg_val = bg_map.get(bg_name)
     
-    st.markdown("---")
-    st.caption("Phiên bản V2.3 - Support Visa China")
+    st.info(f"💡 Phiên bản MediaPipe AI Core\nNhận diện mặt chính xác: {HAS_MEDIAPIPE}")
 
-# --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
+# --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
     current_file_key = f"{input_file.name}_{input_file.size}"
     if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
@@ -440,14 +500,13 @@ if input_file:
         gc.collect()
 
     if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
-        with st.spinner('⏳ Đang tách nền AI...'):
+        with st.spinner('⏳ Đang tách nền AI (u2netp)...'):
             try:
                 st.session_state.raw_nobg = process_raw_to_nobg(input_file)
                 st.session_state.current_file_key = current_file_key
             except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
 
-# --- C. GIAO DIỆN CHÍNH ---
-
+# --- MAIN CONTENT ---
 col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
 with col_btn1:
     current_lvl = st.session_state.get('auto_level', 0)
@@ -464,16 +523,20 @@ col_tools, col_result = st.columns([1, 1.2])
 with col_tools:
     st.subheader("🎛️ Bảng điều khiển")
     
-    manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
+    manual_rot = st.slider("Góc nghiêng (Thủ công + AI):", -15.0, 15.0, 0.0, 0.5)
+    
+    # GỌI HÀM CẮT ẢNH MỚI (V3)
     if 'raw_nobg' in st.session_state:
-        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
-        if final_crop: st.session_state.base = final_crop
-        else: st.error(f"Lỗi: {debug_info}")
+        final_crop, debug_info, _ = crop_final_image_v3(st.session_state.raw_nobg, manual_rot, target_ratio)
+        if final_crop: 
+            st.session_state.base = final_crop
+            st.caption(f"✅ Trạng thái AI: {debug_info}")
+        else: 
+            st.error(f"⚠️ Lỗi AI: {debug_info}")
 
-    tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
+    tab1, tab2, tab3 = st.tabs(["🎨 Ánh sáng & Màu", "👩 Da & Thẩm mỹ", "📐 Bố cục & Nét"])
     
     with tab1:
-        st.caption("Chỉnh độ sáng và màu sắc")
         p_exposure = st.slider("Độ sáng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
         p_temp = st.slider("Nhiệt độ màu", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
@@ -482,31 +545,23 @@ with col_tools:
         with col_w: p_whites = st.slider("Màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
 
     with tab2:
-        st.caption("Làm đẹp da")
         p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
         p_makeup = st.slider("Trang điểm", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         st.markdown("---")
-        
-        ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
-        if ai_enabled:
-            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], 
-                                  horizontal=True, 
-                                  key="gender_radio", 
-                                  on_change=apply_gender_preset)
+        st.caption("Gợi ý: Dùng nút AUTO ở trên sẽ nhanh hơn chỉnh tay.")
 
     with tab3:
-        st.caption("Căn chỉnh vị trí và độ nét")
-        p_zoom = st.slider("Phóng to/Thu nhỏ", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
+        p_zoom = st.slider("Phóng/Thu", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
         col_m1, col_m2 = st.columns(2)
-        with col_m1: p_move_x = st.number_input("Dịch Ngang", -100, 100, st.session_state.get('val_move_x', 0), key="val_move_x")
-        with col_m2: p_move_y = st.number_input("Dịch Dọc", -100, 100, st.session_state.get('val_move_y', 0), key="val_move_y")
+        with col_m1: p_move_x = st.number_input("Dịch Ngang", -200, 200, st.session_state.get('val_move_x', 0), key="val_move_x")
+        with col_m2: p_move_y = st.number_input("Dịch Dọc", -200, 200, st.session_state.get('val_move_y', 0), key="val_move_y")
         
         st.markdown("---")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
-        p_clarity = st.slider("Chi tiết", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
+        p_clarity = st.slider("Chi tiết (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
         p_denoise = st.slider("Giảm nhiễu", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
         p_dehaze = st.slider("Khử sương mù", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
-        p_edge_soft = st.slider("Làm mềm biên", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
+        p_edge_soft = st.slider("Làm mềm biên ảnh", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
 
     params = {
         'smooth': p_smooth, 'makeup': p_makeup,
@@ -517,10 +572,10 @@ with col_tools:
         'edge_soft': p_edge_soft
     }
 
-# --- D. HIỂN THỊ KẾT QUẢ ---
+# --- HIỂN THỊ KẾT QUẢ ---
 with col_result:
     if 'base' in st.session_state and st.session_state.base:
-        with st.spinner("🚀 Đang xử lý ảnh..."):
+        with st.spinner("🚀 Đang xử lý hoàn thiện..."):
             final_person = apply_advanced_effects(st.session_state.base, params)
         
         w, h = final_person.size
@@ -532,7 +587,7 @@ with col_result:
         st.image(final_rgb, caption=f"KẾT QUẢ: {size_option}", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("### 📥 Tải về & In ấn")
+        st.markdown("### 📥 Xuất file")
         d_tab1, d_tab2 = st.tabs(["Lưu Ảnh (JPG)", "In Ấn (PDF)"])
         
         with d_tab1:
@@ -551,8 +606,8 @@ with col_result:
         
         with st.expander("👁️ So sánh Trước / Sau"):
             c_before, c_after = st.columns(2)
-            with c_before: st.image(st.session_state.base, caption="Gốc")
-            with c_after: st.image(final_rgb, caption="Sau chỉnh sửa")
+            with c_before: st.image(st.session_state.raw_nobg, caption="Đã tách nền")
+            with c_after: st.image(final_rgb, caption="Hoàn thiện")
 
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
