@@ -67,9 +67,7 @@ def reset_beauty_params():
     st.session_state.val_edge_soft = 0
     st.session_state.auto_level = 0
 
-# --- HÀM MỚI: XỬ LÝ PRESET NAM/NỮ (SỬA LỖI CRASH) ---
 def apply_gender_preset():
-    # Chỉ chạy khi key 'gender_radio' đã tồn tại
     if 'gender_radio' in st.session_state:
         style = st.session_state.gender_radio
         if style == "Nam":
@@ -188,13 +186,18 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
         (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3]) if len(faces_new) > 0 else face_rect
 
-        if target_ratio == 1.0: 
+        # --- LOGIC CẮT ẢNH MỚI ---
+        if target_ratio == 1.0: # 5x5 Visa Mỹ
             zoom_factor = 1.8  
             top_offset = 0.55 
-        elif target_ratio < 0.7: 
+        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn (NEW)
+            # Zoom nhỏ hơn để mặt to hơn (chiếm 70-80% khung hình)
+            zoom_factor = 1.6  
+            top_offset = 0.50 # Căn giữa
+        elif target_ratio < 0.7: # 4x6
             zoom_factor = 2.0  
             top_offset = 0.45   
-        else:
+        else: # 3x4
             zoom_factor = 2.2
             top_offset = 0.5
 
@@ -317,7 +320,7 @@ def apply_advanced_effects(base_img, params):
 
 def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
-    pdf = FPDF(orientation='P', unit='mm', format=(105, 148))
+    pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) # Khổ A6
     pdf.add_page()
     temp_img_path = "temp_print.jpg"
     img_person.save(temp_img_path, quality=100, dpi=(300, 300))
@@ -326,40 +329,54 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
         margin_x, margin_y = 2, 5
+    elif "3.5x4.5" in size_type: # Visa Úc/Hàn
+        w_mm, h_mm = 35, 45
+        cols, rows = 2, 3 # 2x3 = 6 ảnh
+        margin_x, margin_y = 17, 6 # Căn giữa trang A6 (105-70)/2 = 17.5
     elif "4x6" in size_type:
         w_mm, h_mm = 40, 60
         cols, rows = 2, 2
         margin_x, margin_y = 10, 10
-    else: 
+    else: # 3x4
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
         margin_x, margin_y = 5, 10
 
     for r in range(rows):
         for c in range(cols):
-            x = margin_x + c * (w_mm + 2)
+            x = margin_x + c * (w_mm + 2) # Khoảng cách 2mm
             y = margin_y + r * (h_mm + 2)
             pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
     return pdf.output(dest='S').encode('latin-1')
 
 def create_print_layout_preview(img_person, size_type):
-    PAPER_W, PAPER_H = 1748, 1181 
-    bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
+    PAPER_W, PAPER_H = 1748, 1181 # Pixel cho A6 300dpi ngang? (Code cũ đang dùng logic này)
+    # Tuy nhiên PDF đang để Portrait (105x148). Ta sẽ preview theo Portrait
+    PAPER_W_PX, PAPER_H_PX = 1240, 1748 # A6 Portrait 300dpi
+    
+    bg_paper = Image.new("RGB", (PAPER_W_PX, PAPER_H_PX), (255, 255, 255))
+    
     if "5x5" in size_type: 
-        target_w, target_h = 600, 600
-        rows, cols = 1, 2
-        start_x, start_y = 200, 290 
-        gap = 100
+        target_w, target_h = 590, 590
+        rows, cols = 2, 2
+        start_x, start_y = 30, 200
+        gap = 30
+    elif "3.5x4.5" in size_type:
+        target_w, target_h = 413, 531 # 35mm x 45mm @ 300dpi
+        rows, cols = 3, 2
+        start_x, start_y = 190, 80
+        gap = 40
     elif "4x6" in size_type:
         target_w, target_h = 472, 708
-        rows, cols = 1, 3
-        start_x, start_y = 100, 200
+        rows, cols = 2, 2
+        start_x, start_y = 120, 150
         gap = 50
-    else:
+    else: # 3x4
         target_w, target_h = 354, 472
-        rows, cols = 2, 4
-        start_x, start_y = 100, 100
+        rows, cols = 3, 3
+        start_x, start_y = 80, 120
         gap = 40
+
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
         for c in range(cols):
@@ -388,8 +405,16 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
-    size_option = st.radio("Chọn cỡ ảnh:", ["5x5 cm (Visa Mỹ)", "4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
+    
+    # --- CẬP NHẬT RADIO SIZE ---
+    size_option = st.radio("Chọn cỡ ảnh:", 
+                         ["5x5 cm (Visa Mỹ)", 
+                          "3.5x4.5 cm (Visa Úc/Hàn)", 
+                          "4x6 cm (Hộ chiếu)", 
+                          "3x4 cm (Giấy tờ)"])
+    
     if "Visa Mỹ" in size_option: target_ratio = 1.0 
+    elif "Visa Úc" in size_option: target_ratio = 3.5/4.5 # ~0.777
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
     
@@ -398,7 +423,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.16 - Fix UI Error")
+    st.caption("Phiên bản V2.2 - Added Visa Australia/Korea")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -437,7 +462,7 @@ col_tools, col_result = st.columns([1, 1.2])
 with col_tools:
     st.subheader("🎛️ Bảng điều khiển")
     
-    # Góc xoay thủ công (Để riêng ở trên cho dễ thấy)
+    # Góc xoay thủ công
     manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     if 'raw_nobg' in st.session_state:
         final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
@@ -462,15 +487,12 @@ with col_tools:
         p_makeup = st.slider("Trang điểm/Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         st.markdown("---")
         
-        # --- SỬA LỖI Ở ĐÂY: DÙNG CALLBACK CHO RADIO BUTTON ---
         ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
         if ai_enabled:
-            # Khi người dùng chọn, nó sẽ gọi hàm 'apply_gender_preset' ở trên
             gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], 
                                   horizontal=True, 
                                   key="gender_radio", 
                                   on_change=apply_gender_preset)
-            # Đã xóa đoạn code if/else gây lỗi
 
     with tab3:
         st.caption("Căn chỉnh vị trí và độ nét")
@@ -531,13 +553,12 @@ with col_result:
             else:
                 st.error("Thiếu thư viện fpdf.")
         
-        # So sánh (ẩn trong expander cho gọn)
+        # So sánh
         with st.expander("👁️ So sánh Trước / Sau"):
             c_before, c_after = st.columns(2)
             with c_before: st.image(st.session_state.base, caption="Gốc")
             with c_after: st.image(final_rgb, caption="Sau chỉnh sửa")
 
     else:
-        # Màn hình chờ khi chưa có ảnh
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
