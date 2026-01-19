@@ -14,28 +14,24 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ STH", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ Pro", layout="wide", page_icon="📸")
 
-# CSS làm đẹp giao diện
 st.markdown("""
 <style>
-    /* Làm đẹp tiêu đề */
     .main-title {
         font-size: 2.5rem;
-        color: #4B0082;
+        color: #B22222; /* Đổi màu đỏ đậm cho hợp phong thủy studio */
         text-align: center;
         font-weight: 800;
         margin-bottom: 10px;
         text-shadow: 2px 2px 4px #cccccc;
     }
-    /* Làm nổi bật nút Auto */
     div[data-testid="stButton"] > button:first-child {
         border-radius: 10px;
         font-weight: bold;
     }
-    /* Đóng khung ảnh kết quả */
     .image-container {
-        border: 3px solid #4B0082;
+        border: 3px solid #B22222;
         padding: 10px;
         border-radius: 10px;
         background-color: #f0f2f6;
@@ -67,9 +63,7 @@ def reset_beauty_params():
     st.session_state.val_edge_soft = 0
     st.session_state.auto_level = 0
 
-# --- HÀM MỚI: XỬ LÝ PRESET NAM/NỮ (SỬA LỖI CRASH) ---
 def apply_gender_preset():
-    # Chỉ chạy khi key 'gender_radio' đã tồn tại
     if 'gender_radio' in st.session_state:
         style = st.session_state.gender_radio
         if style == "Nam":
@@ -188,13 +182,20 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
         (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3]) if len(faces_new) > 0 else face_rect
 
-        if target_ratio == 1.0: 
+        # --- LOGIC CẮT ẢNH THEO QUỐC GIA ---
+        if target_ratio == 1.0: # 5x5 Visa Mỹ
             zoom_factor = 1.8  
             top_offset = 0.55 
-        elif target_ratio < 0.7: 
+        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn
+            zoom_factor = 1.6  # Mặt to (70-80%)
+            top_offset = 0.50 
+        elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc (NEW)
+            zoom_factor = 1.75 # Mặt vừa phải nhưng to hơn 4x6 thường (60-70%)
+            top_offset = 0.50  # Căn giữa
+        elif target_ratio < 0.7: # 4x6 Thường
             zoom_factor = 2.0  
             top_offset = 0.45   
-        else:
+        else: # 3x4
             zoom_factor = 2.2
             top_offset = 0.5
 
@@ -317,7 +318,7 @@ def apply_advanced_effects(base_img, params):
 
 def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
-    pdf = FPDF(orientation='P', unit='mm', format=(105, 148))
+    pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) # Khổ A6
     pdf.add_page()
     temp_img_path = "temp_print.jpg"
     img_person.save(temp_img_path, quality=100, dpi=(300, 300))
@@ -326,40 +327,60 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
         margin_x, margin_y = 2, 5
+    elif "3.5x4.5" in size_type: # Visa Úc/Hàn
+        w_mm, h_mm = 35, 45
+        cols, rows = 2, 3
+        margin_x, margin_y = 17, 6 
+    elif "3.3x4.8" in size_type: # Visa Trung Quốc (NEW)
+        w_mm, h_mm = 33, 48
+        cols, rows = 2, 2 # Xếp 4 ảnh
+        margin_x, margin_y = 19, 20 # Căn giữa A6
     elif "4x6" in size_type:
         w_mm, h_mm = 40, 60
         cols, rows = 2, 2
         margin_x, margin_y = 10, 10
-    else: 
+    else: # 3x4
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
         margin_x, margin_y = 5, 10
 
     for r in range(rows):
         for c in range(cols):
-            x = margin_x + c * (w_mm + 2)
+            x = margin_x + c * (w_mm + 2) 
             y = margin_y + r * (h_mm + 2)
             pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
     return pdf.output(dest='S').encode('latin-1')
 
 def create_print_layout_preview(img_person, size_type):
-    PAPER_W, PAPER_H = 1748, 1181 
-    bg_paper = Image.new("RGB", (PAPER_W, PAPER_H), (255, 255, 255))
+    PAPER_W_PX, PAPER_H_PX = 1240, 1748 # A6 Portrait 300dpi
+    bg_paper = Image.new("RGB", (PAPER_W_PX, PAPER_H_PX), (255, 255, 255))
+    
     if "5x5" in size_type: 
-        target_w, target_h = 600, 600
-        rows, cols = 1, 2
-        start_x, start_y = 200, 290 
-        gap = 100
+        target_w, target_h = 590, 590
+        rows, cols = 2, 2
+        start_x, start_y = 30, 200
+        gap = 30
+    elif "3.5x4.5" in size_type:
+        target_w, target_h = 413, 531 
+        rows, cols = 3, 2
+        start_x, start_y = 190, 80
+        gap = 40
+    elif "3.3x4.8" in size_type: # Visa Trung Quốc (NEW)
+        target_w, target_h = 390, 567 # 33x48mm @ 300dpi
+        rows, cols = 2, 2
+        start_x, start_y = 200, 250
+        gap = 40
     elif "4x6" in size_type:
         target_w, target_h = 472, 708
-        rows, cols = 1, 3
-        start_x, start_y = 100, 200
+        rows, cols = 2, 2
+        start_x, start_y = 120, 150
         gap = 50
-    else:
+    else: # 3x4
         target_w, target_h = 354, 472
-        rows, cols = 2, 4
-        start_x, start_y = 100, 100
+        rows, cols = 3, 3
+        start_x, start_y = 80, 120
         gap = 40
+
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
         for c in range(cols):
@@ -368,13 +389,13 @@ def create_print_layout_preview(img_person, size_type):
             bg_paper.paste(img_resized, (x, y))
     return bg_paper
 
-# --- 3. GIAO DIỆN CHÍNH (ĐÃ SẮP XẾP LẠI) ---
+# --- 3. GIAO DIỆN CHÍNH ---
 
 st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn. Chạy: `pip install fpdf`")
 
-# --- A. THANH BÊN (SIDEBAR) - CÀI ĐẶT ĐẦU VÀO ---
+# --- A. THANH BÊN ---
 with st.sidebar:
     st.header("⚙️ Thiết lập Đầu vào")
     st.info("Bước 1: Chọn ảnh và loại ảnh")
@@ -388,8 +409,18 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
-    size_option = st.radio("Chọn cỡ ảnh:", ["5x5 cm (Visa Mỹ)", "4x6 cm (Hộ chiếu)", "3x4 cm (Giấy tờ)"])
+    
+    # --- CẬP NHẬT RADIO SIZE ---
+    size_option = st.radio("Chọn cỡ ảnh:", 
+                         ["5x5 cm (Visa Mỹ)", 
+                          "3.5x4.5 cm (Visa Úc/Hàn/Châu Âu)", 
+                          "3.3x4.8 cm (Visa Trung Quốc)", # --- MỚI ---
+                          "4x6 cm (Hộ chiếu)", 
+                          "3x4 cm (Giấy tờ)"])
+    
     if "Visa Mỹ" in size_option: target_ratio = 1.0 
+    elif "Visa Úc" in size_option: target_ratio = 3.5/4.5 # ~0.777
+    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8 # ~0.6875
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
     
@@ -398,7 +429,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.16 - Fix UI Error")
+    st.caption("Phiên bản V2.3 - Support Visa China")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -415,43 +446,37 @@ if input_file:
                 st.session_state.current_file_key = current_file_key
             except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
 
-# --- C. GIAO DIỆN CHÍNH (MAIN COLUMN) ---
+# --- C. GIAO DIỆN CHÍNH ---
 
-# Khu vực nút bấm lớn
 col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
 with col_btn1:
     current_lvl = st.session_state.get('auto_level', 0)
     label_auto = f"✨ AUTO ĐẸP (Level {current_lvl})" if current_lvl > 0 else "✨ AUTO ĐẸP NGAY"
-    # Nút bấm Auto
-    st.button(label_auto, on_click=set_auto_beauty, type="primary", use_container_width=True, help="Bấm để tự động làm đẹp")
+    st.button(label_auto, on_click=set_auto_beauty, type="primary", use_container_width=True)
 
 with col_btn2:
-    # Nút Reset
     st.button("🔄 Làm lại", on_click=reset_beauty_params, use_container_width=True)
 
 st.divider()
 
-# Chia cột: Bên trái là Công cụ chỉnh, Bên phải là Ảnh
 col_tools, col_result = st.columns([1, 1.2])
 
 with col_tools:
     st.subheader("🎛️ Bảng điều khiển")
     
-    # Góc xoay thủ công (Để riêng ở trên cho dễ thấy)
     manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     if 'raw_nobg' in st.session_state:
         final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
         if final_crop: st.session_state.base = final_crop
         else: st.error(f"Lỗi: {debug_info}")
 
-    # Sắp xếp Slider vào TAB cho gọn
     tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
     
     with tab1:
         st.caption("Chỉnh độ sáng và màu sắc")
         p_exposure = st.slider("Độ sáng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
         p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
-        p_temp = st.slider("Nhiệt độ màu (Ấm/Lạnh)", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
+        p_temp = st.slider("Nhiệt độ màu", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
         col_b, col_w = st.columns(2)
         with col_b: p_blacks = st.slider("Màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
         with col_w: p_whites = st.slider("Màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
@@ -459,18 +484,15 @@ with col_tools:
     with tab2:
         st.caption("Làm đẹp da")
         p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
-        p_makeup = st.slider("Trang điểm/Hồng hào", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
+        p_makeup = st.slider("Trang điểm", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         st.markdown("---")
         
-        # --- SỬA LỖI Ở ĐÂY: DÙNG CALLBACK CHO RADIO BUTTON ---
         ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
         if ai_enabled:
-            # Khi người dùng chọn, nó sẽ gọi hàm 'apply_gender_preset' ở trên
             gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], 
                                   horizontal=True, 
                                   key="gender_radio", 
                                   on_change=apply_gender_preset)
-            # Đã xóa đoạn code if/else gây lỗi
 
     with tab3:
         st.caption("Căn chỉnh vị trí và độ nét")
@@ -481,8 +503,8 @@ with col_tools:
         
         st.markdown("---")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
-        p_clarity = st.slider("Chi tiết (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
-        p_denoise = st.slider("Giảm nhiễu (Denoise)", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
+        p_clarity = st.slider("Chi tiết", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
+        p_denoise = st.slider("Giảm nhiễu", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
         p_dehaze = st.slider("Khử sương mù", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
         p_edge_soft = st.slider("Làm mềm biên", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
 
@@ -498,7 +520,6 @@ with col_tools:
 # --- D. HIỂN THỊ KẾT QUẢ ---
 with col_result:
     if 'base' in st.session_state and st.session_state.base:
-        # Xử lý ảnh
         with st.spinner("🚀 Đang xử lý ảnh..."):
             final_person = apply_advanced_effects(st.session_state.base, params)
         
@@ -507,14 +528,11 @@ with col_result:
         final_img.paste(final_person, (0, 0), final_person)
         final_rgb = final_img.convert("RGB")
 
-        # Hiển thị ảnh trong khung
         st.markdown('<div class="image-container">', unsafe_allow_html=True)
         st.image(final_rgb, caption=f"KẾT QUẢ: {size_option}", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("### 📥 Tải về & In ấn")
-        
-        # Tabs cho phần download
         d_tab1, d_tab2 = st.tabs(["Lưu Ảnh (JPG)", "In Ấn (PDF)"])
         
         with d_tab1:
@@ -531,14 +549,11 @@ with col_result:
             else:
                 st.error("Thiếu thư viện fpdf.")
         
-        # So sánh (ẩn trong expander cho gọn)
         with st.expander("👁️ So sánh Trước / Sau"):
             c_before, c_after = st.columns(2)
             with c_before: st.image(st.session_state.base, caption="Gốc")
             with c_after: st.image(final_rgb, caption="Sau chỉnh sửa")
 
     else:
-        # Màn hình chờ khi chưa có ảnh
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-
