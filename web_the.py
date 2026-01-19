@@ -186,13 +186,13 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         if target_ratio == 1.0: # 5x5 Visa Mỹ
             zoom_factor = 1.8  
             top_offset = 0.55 
-        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn
-            zoom_factor = 1.6  # Mặt to (70-80%)
+        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn/Đài Loan
+            zoom_factor = 1.7  # Tăng nhẹ zoom để mặt to hơn (đạt 70-80% cho Đài Loan)
             top_offset = 0.50 
-        elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc (NEW)
-            zoom_factor = 1.75 # Mặt vừa phải nhưng to hơn 4x6 thường (60-70%)
-            top_offset = 0.50  # Căn giữa
-        elif target_ratio < 0.7: # 4x6 Thường
+        elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc
+            zoom_factor = 1.75 
+            top_offset = 0.50  
+        elif target_ratio < 0.7: # 4x6 Thường (Hộ chiếu)
             zoom_factor = 2.0  
             top_offset = 0.45   
         else: # 3x4
@@ -327,11 +327,11 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
         margin_x, margin_y = 2, 5
-    elif "3.5x4.5" in size_type: # Visa Úc/Hàn
+    elif "3.5x4.5" in size_type: # Visa Úc/Hàn/Đài Loan
         w_mm, h_mm = 35, 45
         cols, rows = 2, 3
         margin_x, margin_y = 17, 6 
-    elif "3.3x4.8" in size_type: # Visa Trung Quốc (NEW)
+    elif "3.3x4.8" in size_type: # Visa Trung Quốc
         w_mm, h_mm = 33, 48
         cols, rows = 2, 2 # Xếp 4 ảnh
         margin_x, margin_y = 19, 20 # Căn giữa A6
@@ -365,8 +365,8 @@ def create_print_layout_preview(img_person, size_type):
         rows, cols = 3, 2
         start_x, start_y = 190, 80
         gap = 40
-    elif "3.3x4.8" in size_type: # Visa Trung Quốc (NEW)
-        target_w, target_h = 390, 567 # 33x48mm @ 300dpi
+    elif "3.3x4.8" in size_type: 
+        target_w, target_h = 390, 567 
         rows, cols = 2, 2
         start_x, start_y = 200, 250
         gap = 40
@@ -410,17 +410,17 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
     
-    # --- CẬP NHẬT RADIO SIZE ---
+    # --- CẬP NHẬT MENU: ĐƯA HỘ CHIẾU LÊN ĐẦU & THÊM ĐÀI LOAN ---
     size_option = st.radio("Chọn cỡ ảnh:", 
-                         ["5x5 cm (Visa Mỹ)", 
-                          "3.5x4.5 cm (Visa Úc/Hàn/Châu Âu)", 
-                          "3.3x4.8 cm (Visa Trung Quốc)", # --- MỚI ---
-                          "4x6 cm (Hộ chiếu)", 
+                         ["4x6 cm (Hộ chiếu)",  # <-- Mặc định (Index 0)
+                          "3.5x4.5 cm (Visa Đài Loan/Úc/Hàn/Âu)", # <-- Thêm Đài Loan
+                          "5x5 cm (Visa Mỹ)",
+                          "3.3x4.8 cm (Visa Trung Quốc)", 
                           "3x4 cm (Giấy tờ)"])
     
     if "Visa Mỹ" in size_option: target_ratio = 1.0 
-    elif "Visa Úc" in size_option: target_ratio = 3.5/4.5 # ~0.777
-    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8 # ~0.6875
+    elif "3.5x4.5" in size_option: target_ratio = 3.5/4.5 # ~0.777
+    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
     
@@ -429,7 +429,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.3 - Support Visa China")
+    st.caption("Phiên bản V2.4 - Default Passport & Taiwan Visa")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -557,4 +557,3 @@ with col_result:
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-
