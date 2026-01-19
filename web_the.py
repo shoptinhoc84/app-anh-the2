@@ -14,7 +14,7 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ Pro", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ STH", layout="wide", page_icon="📸")
 
 # CSS làm đẹp giao diện
 st.markdown("""
@@ -541,3 +541,4 @@ with col_result:
         # Màn hình chờ khi chưa có ảnh
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
+
