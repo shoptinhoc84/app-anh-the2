@@ -3,6 +3,4 @@ rembg
 opencv-python-headless
 Pillow
 numpy<2.0.0
-onnxruntime
-watchdog
-fpdf
+fpdf2
