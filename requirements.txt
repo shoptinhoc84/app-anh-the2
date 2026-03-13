@@ -1,7 +1,9 @@
 streamlit
-rembg==2.0.53
+rembg
 opencv-python-headless
 Pillow
 numpy<2.0.0
-fpdf2
+onnxruntime
+watchdog
+fpdf
 
