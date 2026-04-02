@@ -187,7 +187,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
             zoom_factor = 1.8  
             top_offset = 0.55 
         elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn/Đài Loan
-            zoom_factor = 1.7  # Tăng nhẹ zoom để mặt to hơn (đạt 70-80% cho Đài Loan)
+            zoom_factor = 1.7  
             top_offset = 0.50 
         elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc
             zoom_factor = 1.75 
@@ -318,7 +318,13 @@ def apply_advanced_effects(base_img, params):
 
 def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
-    pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) # Khổ A6
+    
+    # Đổi khổ giấy thành A4 riêng cho 4x6, các cỡ khác vẫn A6
+    if "4x6" in size_type:
+        pdf = FPDF(orientation='P', unit='mm', format='A4') # Khổ A4 (210 x 297 mm)
+    else:
+        pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) # Khổ A6
+        
     pdf.add_page()
     temp_img_path = "temp_print.jpg"
     img_person.save(temp_img_path, quality=100, dpi=(300, 300))
@@ -337,8 +343,8 @@ def create_pdf(img_person, size_type):
         margin_x, margin_y = 19, 20 # Căn giữa A6
     elif "4x6" in size_type:
         w_mm, h_mm = 40, 60
-        cols, rows = 2, 2
-        margin_x, margin_y = 10, 10
+        cols, rows = 2, 4 # Xếp 8 ảnh (2 cột, 4 hàng)
+        margin_x, margin_y = 62, 25 # Căn giữa A4
     else: # 3x4
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
@@ -346,13 +352,20 @@ def create_pdf(img_person, size_type):
 
     for r in range(rows):
         for c in range(cols):
-            x = margin_x + c * (w_mm + 2) 
-            y = margin_y + r * (h_mm + 2)
+            # Tăng khoảng cách gap giữa các ảnh lên 4mm để dễ dùng kéo cắt
+            gap = 4 if "4x6" in size_type else 2
+            x = margin_x + c * (w_mm + gap) 
+            y = margin_y + r * (h_mm + gap)
             pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
     return pdf.output(dest='S').encode('latin-1')
 
 def create_print_layout_preview(img_person, size_type):
-    PAPER_W_PX, PAPER_H_PX = 1240, 1748 # A6 Portrait 300dpi
+    # Đổi kích thước khung xem trước thành A4 riêng cho 4x6
+    if "4x6" in size_type:
+        PAPER_W_PX, PAPER_H_PX = 2480, 3508 # Khổ A4 Portrait 300dpi
+    else:
+        PAPER_W_PX, PAPER_H_PX = 1240, 1748 # Khổ A6 Portrait 300dpi
+        
     bg_paper = Image.new("RGB", (PAPER_W_PX, PAPER_H_PX), (255, 255, 255))
     
     if "5x5" in size_type: 
@@ -372,8 +385,8 @@ def create_print_layout_preview(img_person, size_type):
         gap = 40
     elif "4x6" in size_type:
         target_w, target_h = 472, 708
-        rows, cols = 2, 2
-        start_x, start_y = 120, 150
+        rows, cols = 4, 2 # 4 hàng, 2 cột = 8 ảnh
+        start_x, start_y = 743, 263 # Vị trí bắt đầu để căn giữa A4
         gap = 50
     else: # 3x4
         target_w, target_h = 354, 472
@@ -547,7 +560,7 @@ with col_result:
             st.download_button(label="⬇️ Tải Ảnh JPG Chất Lượng Cao", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg", type="primary", use_container_width=True)
 
         with d_tab2:
-            st.image(create_print_layout_preview(final_rgb, size_option), caption="Xem trước bản in (Khổ A6)", use_container_width=True)
+            st.image(create_print_layout_preview(final_rgb, size_option), caption=f"Xem trước bản in ({'Khổ A4' if '4x6' in size_option else 'Khổ A6'})", use_container_width=True)
             if HAS_FPDF:
                 pdf_data = create_pdf(final_rgb, size_option)
                 st.download_button(label="📄 Tải File PDF để in", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf", use_container_width=True)
