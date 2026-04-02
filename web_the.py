@@ -424,8 +424,13 @@ with st.sidebar:
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
     
-    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt"])
-    bg_map = {"Trắng": (255, 255, 255, 255), "Xanh Chuẩn": (66, 135, 245, 255), "Xanh Nhạt": (135, 206, 250, 255)}
+    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt", "Xanh GPLX"])
+    bg_map = {
+        "Trắng": (255, 255, 255, 255), 
+        "Xanh Chuẩn": (66, 135, 245, 255), 
+        "Xanh Nhạt": (135, 206, 250, 255),
+        "Xanh GPLX": (37, 133, 197, 255)
+    }
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
@@ -538,7 +543,7 @@ with col_result:
         with d_tab1:
             buf = io.BytesIO()
             final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
-            safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light"}.get(bg_name, "custom")
+            safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light", "Xanh GPLX": "blue_gplx"}.get(bg_name, "custom")
             st.download_button(label="⬇️ Tải Ảnh JPG Chất Lượng Cao", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg", type="primary", use_container_width=True)
 
         with d_tab2:
@@ -557,4 +562,3 @@ with col_result:
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-
