@@ -3,5 +3,5 @@ Pillow
 opencv-python-headless
 rembg
 numpy
-fpdf
-mediapipe==0.10.14
+fpdf2
+mediapipe
