@@ -2,6 +2,6 @@ streamlit
 Pillow
 opencv-python-headless
 rembg
-numpy
+numpy<2.0.0
 fpdf2
 mediapipe
