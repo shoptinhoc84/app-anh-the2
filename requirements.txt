@@ -4,4 +4,4 @@ opencv-python-headless
 rembg
 numpy
 fpdf
-mediapipe
+mediapipe==0.10.14
