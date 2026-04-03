@@ -5,6 +5,7 @@ import numpy as np
 from rembg import remove, new_session
 import io
 import gc
+import mediapipe as mp
 
 # --- XỬ LÝ LỖI THƯ VIỆN FPDF ---
 try:
@@ -20,7 +21,7 @@ st.markdown("""
 <style>
     .main-title {
         font-size: 2.5rem;
-        color: #B22222; /* Đổi màu đỏ đậm cho hợp phong thủy studio */
+        color: #B22222;
         text-align: center;
         font-weight: 800;
         margin-bottom: 10px;
@@ -154,6 +155,42 @@ def get_face_angle(gray_img, face_rect):
         return np.degrees(np.arctan2(delta_y, delta_x))
     return 0.0
 
+def detect_face_mediapipe(img_bgra):
+    mp_face_detection = mp.solutions.face_detection
+    img_rgb = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2RGB)
+    h, w, _ = img_rgb.shape
+    
+    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
+        results = face_detection.process(img_rgb)
+        
+        if not results.detections:
+            return None, 0.0
+            
+        detection = results.detections[0]
+        bboxC = detection.location_data.relative_bounding_box
+        
+        x = int(bboxC.xmin * w)
+        y = int(bboxC.ymin * h)
+        width = int(bboxC.width * w)
+        height = int(bboxC.height * h)
+        face_rect = (x, y, width, height)
+        
+        right_eye = detection.location_data.relative_keypoints[0]
+        left_eye = detection.location_data.relative_keypoints[1]
+        
+        p1 = (int(right_eye.x * w), int(right_eye.y * h))
+        p2 = (int(left_eye.x * w), int(left_eye.y * h))
+        
+        delta_x = p2[0] - p1[0]
+        delta_y = p2[1] - p1[1]
+        
+        if delta_x == 0: 
+            angle = 0.0
+        else:
+            angle = np.degrees(np.arctan2(delta_y, delta_x))
+            
+        return face_rect, angle
+
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
@@ -162,40 +199,52 @@ def process_raw_to_nobg(file_input):
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
-def crop_final_image(no_bg_img, manual_angle, target_ratio):
+def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="MediaPipe"):
     try:
         img_working = no_bg_img.copy()
-        gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+        
+        if detector_type == "MediaPipe":
+            result = detect_face_mediapipe(img_working)
+            if result[0] is None: return None, "Không tìm thấy khuôn mặt (MediaPipe)", 0
+            face_rect, auto_angle = result
+            (x, y, w, h) = face_rect
+        else:
+            gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+            if len(faces) == 0: return None, "Không tìm thấy khuôn mặt (Haarcascade)", 0
+            face_rect = max(faces, key=lambda f: f[2] * f[3])
+            auto_angle = get_face_angle(gray, face_rect)
+            (x, y, w, h) = face_rect
 
-        if len(faces) == 0: return None, "Không tìm thấy khuôn mặt", 0
-
-        face_rect = max(faces, key=lambda f: f[2] * f[3])
-        auto_angle = get_face_angle(gray, face_rect)
         if abs(auto_angle) < 1.0 or abs(auto_angle) > 20.0: auto_angle = 0.0 
 
         total_angle = auto_angle + manual_angle
         img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
 
-        gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
-        faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
-        (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3]) if len(faces_new) > 0 else face_rect
+        if detector_type == "MediaPipe":
+            result_new = detect_face_mediapipe(img_rotated)
+            if result_new[0] is not None:
+                (x, y, w, h) = result_new[0]
+        else:
+            gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
+            faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
+            if len(faces_new) > 0:
+                (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3])
 
-        # --- LOGIC CẮT ẢNH THEO QUỐC GIA ---
-        if target_ratio == 1.0: # 5x5 Visa Mỹ
+        if target_ratio == 1.0: 
             zoom_factor = 1.8  
             top_offset = 0.55 
-        elif 0.77 <= target_ratio <= 0.78: # 3.5x4.5 Visa Úc/Hàn/Đài Loan
+        elif 0.77 <= target_ratio <= 0.78: 
             zoom_factor = 1.7  
             top_offset = 0.50 
-        elif 0.68 <= target_ratio <= 0.69: # 3.3x4.8 Visa Trung Quốc
+        elif 0.68 <= target_ratio <= 0.69: 
             zoom_factor = 1.75 
             top_offset = 0.50  
-        elif target_ratio < 0.7: # 4x6 Thường (Hộ chiếu)
+        elif target_ratio < 0.7: 
             zoom_factor = 2.0  
             top_offset = 0.45   
-        else: # 3x4
+        else: 
             zoom_factor = 2.2
             top_offset = 0.5
 
@@ -209,7 +258,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio):
         img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
-        return canvas, f"Góc Auto: {auto_angle:.1f}°", total_angle
+        return canvas, f"Góc Auto ({detector_type}): {auto_angle:.1f}°", total_angle
     except Exception as e:
         return None, str(e), 0
 
@@ -319,11 +368,10 @@ def apply_advanced_effects(base_img, params):
 def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
     
-    # Đổi khổ giấy thành A4 riêng cho 4x6, các cỡ khác vẫn A6
     if "4x6" in size_type:
-        pdf = FPDF(orientation='P', unit='mm', format='A4') # Khổ A4 (210 x 297 mm)
+        pdf = FPDF(orientation='P', unit='mm', format='A4') 
     else:
-        pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) # Khổ A6
+        pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) 
         
     pdf.add_page()
     temp_img_path = "temp_print.jpg"
@@ -333,26 +381,25 @@ def create_pdf(img_person, size_type):
         w_mm, h_mm = 50, 50
         cols, rows = 2, 2
         margin_x, margin_y = 2, 5
-    elif "3.5x4.5" in size_type: # Visa Úc/Hàn/Đài Loan
+    elif "3.5x4.5" in size_type: 
         w_mm, h_mm = 35, 45
         cols, rows = 2, 3
         margin_x, margin_y = 17, 6 
-    elif "3.3x4.8" in size_type: # Visa Trung Quốc
+    elif "3.3x4.8" in size_type: 
         w_mm, h_mm = 33, 48
-        cols, rows = 2, 2 # Xếp 4 ảnh
-        margin_x, margin_y = 19, 20 # Căn giữa A6
+        cols, rows = 2, 2 
+        margin_x, margin_y = 19, 20 
     elif "4x6" in size_type:
         w_mm, h_mm = 40, 60
-        cols, rows = 2, 4 # Xếp 8 ảnh (2 cột, 4 hàng)
-        margin_x, margin_y = 62, 25 # Căn giữa A4
-    else: # 3x4
+        cols, rows = 2, 4 
+        margin_x, margin_y = 62, 25 
+    else: 
         w_mm, h_mm = 30, 40
         cols, rows = 3, 3
         margin_x, margin_y = 5, 10
 
     for r in range(rows):
         for c in range(cols):
-            # Tăng khoảng cách gap giữa các ảnh lên 4mm để dễ dùng kéo cắt
             gap = 4 if "4x6" in size_type else 2
             x = margin_x + c * (w_mm + gap) 
             y = margin_y + r * (h_mm + gap)
@@ -360,11 +407,10 @@ def create_pdf(img_person, size_type):
     return pdf.output(dest='S').encode('latin-1')
 
 def create_print_layout_preview(img_person, size_type):
-    # Đổi kích thước khung xem trước thành A4 riêng cho 4x6
     if "4x6" in size_type:
-        PAPER_W_PX, PAPER_H_PX = 2480, 3508 # Khổ A4 Portrait 300dpi
+        PAPER_W_PX, PAPER_H_PX = 2480, 3508 
     else:
-        PAPER_W_PX, PAPER_H_PX = 1240, 1748 # Khổ A6 Portrait 300dpi
+        PAPER_W_PX, PAPER_H_PX = 1240, 1748 
         
     bg_paper = Image.new("RGB", (PAPER_W_PX, PAPER_H_PX), (255, 255, 255))
     
@@ -385,10 +431,10 @@ def create_print_layout_preview(img_person, size_type):
         gap = 40
     elif "4x6" in size_type:
         target_w, target_h = 472, 708
-        rows, cols = 4, 2 # 4 hàng, 2 cột = 8 ảnh
-        start_x, start_y = 743, 263 # Vị trí bắt đầu để căn giữa A4
+        rows, cols = 4, 2 
+        start_x, start_y = 743, 263 
         gap = 50
-    else: # 3x4
+    else: 
         target_w, target_h = 354, 472
         rows, cols = 3, 3
         start_x, start_y = 80, 120
@@ -406,7 +452,7 @@ def create_print_layout_preview(img_person, size_type):
 
 st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 if not HAS_FPDF:
-    st.warning("⚠️ Chưa cài thư viện in ấn. Chạy: `pip install fpdf`")
+    st.warning("⚠️ Chưa cài thư viện in ấn. Cần đảm bảo file requirements.txt có fpdf")
 
 # --- A. THANH BÊN ---
 with st.sidebar:
@@ -421,18 +467,22 @@ with st.sidebar:
         input_file = st.camera_input("Chụp ảnh ngay")
 
     st.markdown("---")
+    st.subheader("🤖 Công nghệ AI Nhận diện")
+    detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
+    detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+
+    st.markdown("---")
     st.subheader("Kích thước & Phông nền")
     
-    # --- CẬP NHẬT MENU: ĐƯA HỘ CHIẾU LÊN ĐẦU & THÊM ĐÀI LOAN ---
     size_option = st.radio("Chọn cỡ ảnh:", 
-                         ["4x6 cm (Hộ chiếu)",  # <-- Mặc định (Index 0)
-                          "3.5x4.5 cm (Visa Đài Loan/Úc/Hàn/Âu)", # <-- Thêm Đài Loan
+                         ["4x6 cm (Hộ chiếu)", 
+                          "3.5x4.5 cm (Visa Đài Loan/Úc/Hàn/Âu)",
                           "5x5 cm (Visa Mỹ)",
                           "3.3x4.8 cm (Visa Trung Quốc)", 
                           "3x4 cm (Giấy tờ)"])
     
     if "Visa Mỹ" in size_option: target_ratio = 1.0 
-    elif "3.5x4.5" in size_option: target_ratio = 3.5/4.5 # ~0.777
+    elif "3.5x4.5" in size_option: target_ratio = 3.5/4.5
     elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8
     elif "3x4" in size_option: target_ratio = 3/4
     else: target_ratio = 4/6
@@ -447,7 +497,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.4 - Default Passport & Taiwan Visa")
+    st.caption("Phiên bản V2.5 - Dual AI Engine")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -465,7 +515,6 @@ if input_file:
             except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
 
 # --- C. GIAO DIỆN CHÍNH ---
-
 col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
 with col_btn1:
     current_lvl = st.session_state.get('auto_level', 0)
@@ -484,7 +533,7 @@ with col_tools:
     
     manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     if 'raw_nobg' in st.session_state:
-        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio)
+        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio, detector_type)
         if final_crop: st.session_state.base = final_crop
         else: st.error(f"Lỗi: {debug_info}")
 
