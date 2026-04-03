@@ -5,7 +5,10 @@ import numpy as np
 from rembg import remove, new_session
 import io
 import gc
+
+# --- KHẮC PHỤC LỖI MEDIAPIPE TRÊN STREAMLIT CLOUD ---
 import mediapipe as mp
+from mediapipe.python.solutions import face_detection as mp_face_detection
 
 # --- XỬ LÝ LỖI THƯ VIỆN FPDF ---
 try:
@@ -156,7 +159,6 @@ def get_face_angle(gray_img, face_rect):
     return 0.0
 
 def detect_face_mediapipe(img_bgra):
-    mp_face_detection = mp.solutions.face_detection
     img_rgb = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2RGB)
     h, w, _ = img_rgb.shape
     
@@ -328,7 +330,7 @@ def apply_advanced_effects(base_img, params):
         sigma = int(params['smooth'] * 2) + 10
         img_bgr = cv2.bilateralFilter(img_bgr, d=d, sigmaColor=sigma, sigmaSpace=sigma)
     if params['dehaze'] > 0:
-        lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+        lab = cv2.cvtColor(img_bgr, COLOR_BGR2LAB)
         l_c, a_c, b_c = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=1.0 + (params['dehaze']/10.0), tileGridSize=(8,8))
         l_c = clahe.apply(l_c)
@@ -497,7 +499,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5 - Dual AI Engine")
+    st.caption("Phiên bản V2.5.1 - Dual AI Engine (Fixed MediaPipe)")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
