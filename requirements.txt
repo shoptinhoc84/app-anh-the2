@@ -1,8 +1,7 @@
 streamlit
-rembg
-opencv-python-headless
 Pillow
-numpy<2.0.0
-onnxruntime
-watchdog
+opencv-python-headless
+rembg
+numpy
 fpdf
+mediapipe==0.10.14
