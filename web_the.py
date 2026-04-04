@@ -6,11 +6,14 @@ from rembg import remove, new_session
 import io
 import gc
 
-# --- KHẮC PHỤC LỖI MEDIAPIPE TRÊN STREAMLIT CLOUD ---
-import mediapipe as mp
-from mediapipe.python.solutions import face_detection as mp_face_detection
+# --- BẢO VỆ CHỐNG SẬP KHI THIẾU THƯ VIỆN ---
+try:
+    import mediapipe as mp
+    from mediapipe.python.solutions import face_detection as mp_face_detection
+    HAS_MEDIAPIPE = True
+except ImportError:
+    HAS_MEDIAPIPE = False
 
-# --- XỬ LÝ LỖI THƯ VIỆN FPDF ---
 try:
     from fpdf import FPDF
     HAS_FPDF = True
@@ -159,6 +162,7 @@ def get_face_angle(gray_img, face_rect):
     return 0.0
 
 def detect_face_mediapipe(img_bgra):
+    if not HAS_MEDIAPIPE: return None, 0.0
     img_rgb = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2RGB)
     h, w, _ = img_rgb.shape
     
@@ -205,7 +209,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="Media
     try:
         img_working = no_bg_img.copy()
         
-        if detector_type == "MediaPipe":
+        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
             result = detect_face_mediapipe(img_working)
             if result[0] is None: return None, "Không tìm thấy khuôn mặt (MediaPipe)", 0
             face_rect, auto_angle = result
@@ -224,7 +228,7 @@ def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="Media
         total_angle = auto_angle + manual_angle
         img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
 
-        if detector_type == "MediaPipe":
+        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
             result_new = detect_face_mediapipe(img_rotated)
             if result_new[0] is not None:
                 (x, y, w, h) = result_new[0]
@@ -330,7 +334,6 @@ def apply_advanced_effects(base_img, params):
         sigma = int(params['smooth'] * 2) + 10
         img_bgr = cv2.bilateralFilter(img_bgr, d=d, sigmaColor=sigma, sigmaSpace=sigma)
     if params['dehaze'] > 0:
-        # ĐÃ SỬA LỖI TẠI ĐÂY: Thêm cv2. trước COLOR_BGR2LAB
         lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
         l_c, a_c, b_c = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=1.0 + (params['dehaze']/10.0), tileGridSize=(8,8))
@@ -455,7 +458,7 @@ def create_print_layout_preview(img_person, size_type):
 
 st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 if not HAS_FPDF:
-    st.warning("⚠️ Chưa cài thư viện in ấn. Cần đảm bảo file requirements.txt có fpdf")
+    st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
 
 # --- A. THANH BÊN ---
 with st.sidebar:
@@ -471,8 +474,12 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("🤖 Công nghệ AI Nhận diện")
-    detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
-    detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+    if HAS_MEDIAPIPE:
+        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
+        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+    else:
+        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
+        detector_type = "Haarcascade"
 
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
@@ -500,7 +507,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.2 - Dual AI Engine")
+    st.caption("Phiên bản V2.5.3 - Bất tử (Safe Import)")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
