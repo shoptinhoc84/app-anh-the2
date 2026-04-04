@@ -5,4 +5,3 @@ onnxruntime
 rembg
 numpy<2.0.0
 fpdf2
-mediapipe
