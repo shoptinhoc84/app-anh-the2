@@ -1,7 +1,6 @@
 streamlit
 Pillow
-opencv-python-headless==4.9.0.80
-numpy==1.26.4
-rembg==2.0.53
+opencv-python-headless
+rembg
+numpy<2.0.0
 fpdf2
-mediapipe==0.10.14
