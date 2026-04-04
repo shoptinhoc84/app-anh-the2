@@ -410,7 +410,9 @@ def create_pdf(img_person, size_type):
             x = margin_x + c * (w_mm + gap) 
             y = margin_y + r * (h_mm + gap)
             pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
-    return pdf.output(dest='S').encode('latin-1')
+            
+    # CHỖ NÀY ĐÃ ĐƯỢC FIX LỖI BYTEARRAY
+    return bytes(pdf.output())
 
 def create_print_layout_preview(img_person, size_type):
     if "4x6" in size_type:
@@ -507,7 +509,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.3 - Bất tử (Safe Import)")
+    st.caption("Phiên bản V2.5.4 - PDF Fixed")
 
 # --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -622,7 +624,8 @@ with col_result:
             st.image(create_print_layout_preview(final_rgb, size_option), caption=f"Xem trước bản in ({'Khổ A4' if '4x6' in size_option else 'Khổ A6'})", use_container_width=True)
             if HAS_FPDF:
                 pdf_data = create_pdf(final_rgb, size_option)
-                st.download_button(label="📄 Tải File PDF để in", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf", use_container_width=True)
+                if pdf_data:
+                    st.download_button(label="📄 Tải File PDF để in", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf", use_container_width=True)
             else:
                 st.error("Thiếu thư viện fpdf.")
         
