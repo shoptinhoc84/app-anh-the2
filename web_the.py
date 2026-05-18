@@ -22,17 +22,24 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ SHOPTINHOC", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ - Hỗ trợ: 0939.949.752 (Huyên)", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
     .main-title {
-        font-size: 2.5rem;
+        font-size: 2.2rem;
         color: #B22222;
         text-align: center;
         font-weight: 800;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
         text-shadow: 2px 2px 4px #cccccc;
+    }
+    .sub-title {
+        font-size: 1.2rem;
+        color: #555;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 20px;
     }
     div[data-testid="stButton"] > button:first-child {
         border-radius: 10px;
@@ -458,7 +465,9 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">THÊM SỐ ĐIỆN THOẠI HỖ TRỢ: 0939.949.752 (HUYÊN)</div>', unsafe_allow_html=True)
+
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
 
@@ -470,7 +479,7 @@ with st.sidebar:
 
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP 2 NGƯỜI
 if app_mode == "👥 Tool Ghép In A4 (2 Người)":
-    st.info("💡 Hướng dẫn: Tải ảnh đơn chân dung đã chỉnh hoàn thiện từ mục Studio về máy, rồi đưa vào đây để ghép 2 người in trên cùng 1 tờ A4.")
+    st.info("💡 Hướng dẫn: Tải ảnh đơn đã chỉnh hoàn thiện ở Studio về máy, rồi đưa vào đây để ghép 2 người in trên cùng 1 tờ A4 (Hỗ trợ 3x4 và 4x6).")
     
     html_code = """
     <!DOCTYPE html>
@@ -480,8 +489,11 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body { font-family: Arial, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px;}
-            .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 550px; width: 100%; text-align: center;}
+            .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 580px; width: 100%; text-align: center;}
             h2 { color: #333; margin-top: 0;}
+            .size-selector { margin-bottom: 20px; text-align: left; background: #e9ecef; padding: 15px; border-radius: 8px;}
+            .size-selector label { font-weight: bold; color: #444; }
+            .size-selector select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; font-size: 15px; cursor: pointer;}
             .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px; text-align: left;}
             .person-box { flex: 1; border: 1.5px dashed #aaa; padding: 15px; border-radius: 8px; background: #fafafa;}
             .person-box h4 { margin: 0 0 10px 0; color: #007bff; }
@@ -494,8 +506,15 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     </head>
     <body>
         <div class="container">
-            <h2>Ghép 2 Người (18 Ảnh 3x4) / A4</h2>
-            <p style="font-size: 13px; color: #666; margin-bottom: 20px;">Mỗi người sẽ có 9 ảnh 3x4 xếp thành cụm. Bản in chuẩn tờ A4 có vạch chia đôi.</p>
+            <h2>Tool Ghép 2 Người Tự Động</h2>
+            
+            <div class="size-selector">
+                <label>📏 Chọn Kích Thước In:</label>
+                <select id="printSize">
+                    <option value="3x4">In 18 ảnh cỡ 3x4 cm (Giấy A4 Dọc)</option>
+                    <option value="4x6">In 18 ảnh cỡ 4x6 cm (Giấy A4 Ngang)</option>
+                </select>
+            </div>
             
             <div class="upload-group">
                 <div class="person-box">
@@ -551,35 +570,65 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                 }
 
                 try {
+                    const printSize = document.getElementById('printSize').value;
                     const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-                    function draw9Photos(imgData, imgType, startY) {
-                        const imgWidth = 30; const imgHeight = 40;
-                        const gapX = 5; const gapY = 5;
-                        const startX = 55; 
-                        
-                        for (let row = 0; row < 3; row++) {
-                            for (let col = 0; col < 3; col++) {
-                                const x = startX + col * (imgWidth + gapX);
-                                const y = startY + row * (imgHeight + gapY);
-                                
-                                doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                doc.setDrawColor(200, 200, 200); 
-                                doc.setLineWidth(0.2);
-                                doc.rect(x, y, imgWidth, imgHeight);
+                    if (printSize === '3x4') {
+                        // LOGIC XẾP ẢNH 3x4 (A4 DỌC)
+                        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+                        function draw9Photos3x4(imgData, imgType, startY) {
+                            const imgWidth = 30, imgHeight = 40, gapX = 5, gapY = 5, startX = 55; 
+                            for (let row = 0; row < 3; row++) {
+                                for (let col = 0; col < 3; col++) {
+                                    const x = startX + col * (imgWidth + gapX);
+                                    const y = startY + row * (imgHeight + gapY);
+                                    doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
+                                    doc.setDrawColor(200, 200, 200); 
+                                    doc.setLineWidth(0.2);
+                                    doc.rect(x, y, imgWidth, imgHeight);
+                                }
                             }
                         }
+
+                        draw9Photos3x4(data1, type1, 20); // Nửa trên
+                        draw9Photos3x4(data2, type2, 160); // Nửa dưới
+                        
+                        // Đường chia đôi ngang tờ giấy A4 dọc
+                        doc.setDrawColor(150, 150, 150);
+                        doc.setLineDashPattern([2, 2], 0);
+                        doc.line(10, 148.5, 200, 148.5); 
+                        doc.save('Anh_The_3x4_2_Nguoi.pdf');
+
+                    } else {
+                        // LOGIC XẾP ẢNH 4x6 (A4 NGANG - LANDSCAPE)
+                        // Vì A4 dọc không đủ chỗ cho 18 ảnh 4x6, ta phải xoay ngang tờ giấy
+                        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                        
+                        function draw9Photos4x6(imgData, imgType, startX) {
+                            const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 10; 
+                            for (let row = 0; row < 3; row++) {
+                                for (let col = 0; col < 3; col++) {
+                                    const x = startX + col * (imgWidth + gapX);
+                                    const y = startY + row * (imgHeight + gapY);
+                                    doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
+                                    doc.setDrawColor(200, 200, 200); 
+                                    doc.setLineWidth(0.2);
+                                    doc.rect(x, y, imgWidth, imgHeight);
+                                }
+                            }
+                        }
+
+                        draw9Photos4x6(data1, type1, 12); // Nửa trái
+                        draw9Photos4x6(data2, type2, 155); // Nửa phải
+                        
+                        // Đường chia đôi dọc tờ giấy A4 ngang
+                        doc.setDrawColor(150, 150, 150);
+                        doc.setLineDashPattern([2, 2], 0);
+                        doc.line(148.5, 10, 148.5, 200); 
+                        doc.save('Anh_The_4x6_2_Nguoi.pdf');
                     }
 
-                    draw9Photos(data1, type1, 20);
-                    draw9Photos(data2, type2, 160);
-
-                    doc.setDrawColor(150, 150, 150);
-                    doc.setLineDashPattern([2, 2], 0);
-                    doc.line(10, 153, 200, 153);
-
-                    doc.save('Anh_The_3x4_2_Nguoi_A4.pdf');
                 } catch (error) {
                     alert("Có lỗi xảy ra: " + error.message);
                 }
@@ -588,7 +637,7 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     </body>
     </html>
     """
-    components.html(html_code, height=750, scrolling=True)
+    components.html(html_code, height=800, scrolling=True)
     st.stop()
 
 # --- BẢN CHỈNH SỬA STUDIO GỐC SẼ ĐƯỢC CHẠY KHI ĐANG Ở CHẾ ĐỘ STUDIO ---
