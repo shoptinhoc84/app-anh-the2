@@ -362,7 +362,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -501,8 +501,24 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             .person-box h4 { margin: 0 0 10px 0; color: #007bff; }
             input[type="file"] { width: 100%; font-size: 14px; }
             .preview { max-width: 90px; margin-top: 15px; display: none; border: 1px solid #ccc; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);}
-            button { padding: 14px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 6px; transition: background 0.3s; width: 100%; }
-            button:hover { background-color: #218838; }
+            
+            #generateBtn { padding: 14px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 6px; transition: background 0.3s; width: 100%; }
+            #generateBtn:hover { background-color: #218838; }
+            
+            /* Style cho nút xóa ảnh mới được thêm vào */
+            .clear-btn {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 6px 12px;
+                font-size: 13px;
+                cursor: pointer;
+                margin-top: 10px;
+                transition: 0.3s;
+                display: none; /* Ẩn đi khi chưa có ảnh */
+            }
+            .clear-btn:hover { background-color: #c82333; }
         </style>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     </head>
@@ -522,13 +538,19 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                 <div class="person-box">
                     <h4>👤 Người thứ 1</h4>
                     <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
-                    <center><img id="preview1" class="preview" alt="Preview 1"></center>
+                    <center>
+                        <img id="preview1" class="preview" alt="Preview 1">
+                        <button id="clearBtn1" class="clear-btn">❌ Xóa ảnh</button>
+                    </center>
                 </div>
 
                 <div class="person-box">
                     <h4>👤 Người thứ 2</h4>
                     <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
-                    <center><img id="preview2" class="preview" alt="Preview 2"></center>
+                    <center>
+                        <img id="preview2" class="preview" alt="Preview 2">
+                        <button id="clearBtn2" class="clear-btn">❌ Xóa ảnh</button>
+                    </center>
                 </div>
             </div>
             
@@ -539,7 +561,8 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             let data1 = null, type1 = 'JPEG';
             let data2 = null, type2 = 'JPEG';
 
-            function handleImageUpload(inputId, previewId, personNum) {
+            function handleImageUpload(inputId, previewId, clearBtnId, personNum) {
+                // Sự kiện khi tải ảnh lên
                 document.getElementById(inputId).addEventListener('change', function(e) {
                     const file = e.target.files[0];
                     if (file) {
@@ -554,14 +577,32 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             const imgElement = document.getElementById(previewId);
                             imgElement.src = event.target.result;
                             imgElement.style.display = 'block';
+                            
+                            // Hiển thị nút xóa ảnh
+                            document.getElementById(clearBtnId).style.display = 'inline-block';
                         }
                         reader.readAsDataURL(file);
                     }
                 });
+
+                // Sự kiện khi bấm nút xóa ảnh
+                document.getElementById(clearBtnId).addEventListener('click', function() {
+                    // Xóa file đã chọn trong input
+                    document.getElementById(inputId).value = "";
+                    // Ẩn khung preview
+                    document.getElementById(previewId).style.display = 'none';
+                    document.getElementById(previewId).src = "";
+                    // Ẩn chính nút xóa này đi
+                    this.style.display = 'none';
+                    // Xóa data lưu trữ
+                    if(personNum === 1) data1 = null;
+                    if(personNum === 2) data2 = null;
+                });
             }
 
-            handleImageUpload('imgInput1', 'preview1', 1);
-            handleImageUpload('imgInput2', 'preview2', 2);
+            // Kích hoạt hàm cho 2 khung người
+            handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 1);
+            handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 2);
 
             document.getElementById('generateBtn').addEventListener('click', function() {
                 if (typeof window.jspdf === 'undefined') {
@@ -576,7 +617,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     const { jsPDF } = window.jspdf;
 
                     if (printSize === '3x4') {
-                        // LOGIC XẾP ẢNH 3x4 (A4 DỌC)
                         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
                         function draw9Photos3x4(imgData, imgType, startY) {
@@ -593,17 +633,15 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             }
                         }
 
-                        draw9Photos3x4(data1, type1, 20); // Nửa trên
-                        draw9Photos3x4(data2, type2, 160); // Nửa dưới
+                        draw9Photos3x4(data1, type1, 20); 
+                        draw9Photos3x4(data2, type2, 160); 
                         
-                        // Đường chia đôi ngang tờ giấy A4 dọc
                         doc.setDrawColor(150, 150, 150);
                         doc.setLineDashPattern([2, 2], 0);
                         doc.line(10, 148.5, 200, 148.5); 
                         doc.save('Anh_The_3x4_2_Nguoi.pdf');
 
                     } else {
-                        // LOGIC XẾP ẢNH 4x6 (A4 NGANG - LANDSCAPE)
                         const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                         
                         function draw9Photos4x6(imgData, imgType, startX) {
@@ -620,10 +658,9 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             }
                         }
 
-                        draw9Photos4x6(data1, type1, 12); // Nửa trái
-                        draw9Photos4x6(data2, type2, 155); // Nửa phải
+                        draw9Photos4x6(data1, type1, 12); 
+                        draw9Photos4x6(data2, type2, 155); 
                         
-                        // Đường chia đôi dọc tờ giấy A4 ngang
                         doc.setDrawColor(150, 150, 150);
                         doc.setLineDashPattern([2, 2], 0);
                         doc.line(148.5, 10, 148.5, 200); 
@@ -646,7 +683,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ STUDIO XỬ LÝ
 # ==============================================================================
 
-# --- PHẦN BỊ THIẾU ĐÃ ĐƯỢC THÊM LẠI VÀO ĐÂY ---
 with st.sidebar:
     st.header("⚙️ Thiết lập Đầu vào")
     st.info("Bước 1: Chọn ảnh và loại ảnh")
@@ -693,7 +729,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.5 - Đã tích hợp Tool Ghép 2 Người")
+    st.caption("Phiên bản V2.5.6 - Có nút Xóa Ảnh")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
