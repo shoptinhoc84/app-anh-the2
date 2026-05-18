@@ -362,7 +362,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -477,7 +477,9 @@ with st.sidebar:
     app_mode = st.radio("Chọn chế độ:", ["📸 Studio Xử Lý (1 Người)", "👥 Tool Ghép In A4 (2 Người)"])
     st.markdown("---")
 
+# ==============================================================================
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP 2 NGƯỜI
+# ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     st.info("💡 Hướng dẫn: Tải ảnh đơn đã chỉnh hoàn thiện ở Studio về máy, rồi đưa vào đây để ghép 2 người in trên cùng 1 tờ A4 (Hỗ trợ 3x4 và 4x6).")
     
@@ -602,7 +604,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
 
                     } else {
                         // LOGIC XẾP ẢNH 4x6 (A4 NGANG - LANDSCAPE)
-                        // Vì A4 dọc không đủ chỗ cho 18 ảnh 4x6, ta phải xoay ngang tờ giấy
                         const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                         
                         function draw9Photos4x6(imgData, imgType, startX) {
@@ -640,7 +641,75 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     components.html(html_code, height=800, scrolling=True)
     st.stop()
 
-# --- BẢN CHỈNH SỬA STUDIO GỐC SẼ ĐƯỢC CHẠY KHI ĐANG Ở CHẾ ĐỘ STUDIO ---
+
+# ==============================================================================
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ STUDIO XỬ LÝ
+# ==============================================================================
+
+# --- PHẦN BỊ THIẾU ĐÃ ĐƯỢC THÊM LẠI VÀO ĐÂY ---
+with st.sidebar:
+    st.header("⚙️ Thiết lập Đầu vào")
+    st.info("Bước 1: Chọn ảnh và loại ảnh")
+    
+    input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
+    input_file = None
+    if input_method == "📁 Tải ảnh lên":
+        input_file = st.file_uploader("Chọn file (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
+    else:
+        input_file = st.camera_input("Chụp ảnh ngay")
+
+    st.markdown("---")
+    st.subheader("🤖 Công nghệ AI Nhận diện")
+    if HAS_MEDIAPIPE:
+        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
+        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+    else:
+        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
+        detector_type = "Haarcascade"
+
+    st.markdown("---")
+    st.subheader("Kích thước & Phông nền")
+    
+    size_option = st.radio("Chọn cỡ ảnh:", 
+                         ["4x6 cm (Hộ chiếu)", 
+                          "3.5x4.5 cm (Visa Đài Loan/Úc/Hàn/Âu)",
+                          "5x5 cm (Visa Mỹ)",
+                          "3.3x4.8 cm (Visa Trung Quốc)", 
+                          "3x4 cm (Giấy tờ)"])
+    
+    if "Visa Mỹ" in size_option: target_ratio = 1.0 
+    elif "3.5x4.5" in size_option: target_ratio = 3.5/4.5
+    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8
+    elif "3x4" in size_option: target_ratio = 3/4
+    else: target_ratio = 4/6
+    
+    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt", "Xanh GPLX"])
+    bg_map = {
+        "Trắng": (255, 255, 255, 255), 
+        "Xanh Chuẩn": (66, 135, 245, 255), 
+        "Xanh Nhạt": (135, 206, 250, 255),
+        "Xanh GPLX": (37, 133, 197, 255)
+    }
+    bg_val = bg_map.get(bg_name)
+    
+    st.markdown("---")
+    st.caption("Phiên bản V2.5.5 - Đã tích hợp Tool Ghép 2 Người")
+
+# --- XỬ LÝ ẢNH ĐẦU VÀO ---
+if input_file:
+    current_file_key = f"{input_file.name}_{input_file.size}"
+    if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
+        if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
+        if 'base' in st.session_state: del st.session_state.base
+        gc.collect()
+
+    if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
+        with st.spinner('⏳ Đang tách nền AI...'):
+            try:
+                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
+                st.session_state.current_file_key = current_file_key
+            except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
+
 col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
 with col_btn1:
     current_lvl = st.session_state.get('auto_level', 0)
@@ -751,18 +820,3 @@ with col_result:
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-
-# --- THÔNG TIN ĐẦU VÀO ĐƯỢC CHUYỂN XUỐNG DƯỚI ĐỂ ĐẢM BẢO HOẠT ĐỘNG SIDEBAR ---
-if input_file:
-    current_file_key = f"{input_file.name}_{input_file.size}"
-    if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
-        if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
-        if 'base' in st.session_state: del st.session_state.base
-        gc.collect()
-
-    if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
-        with st.spinner('⏳ Đang tách nền AI...'):
-            try:
-                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
-                st.session_state.current_file_key = current_file_key
-            except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
