@@ -5,6 +5,7 @@ import numpy as np
 from rembg import remove, new_session
 import io
 import gc
+import streamlit.components.v1 as components
 
 # --- BẢO VỆ CHỐNG SẬP KHI THIẾU THƯ VIỆN ---
 try:
@@ -411,7 +412,6 @@ def create_pdf(img_person, size_type):
             y = margin_y + r * (h_mm + gap)
             pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
             
-    # CHỖ NÀY ĐÃ ĐƯỢC FIX LỖI BYTEARRAY
     return bytes(pdf.output())
 
 def create_print_layout_preview(img_person, size_type):
@@ -462,71 +462,136 @@ st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
 
-# --- A. THANH BÊN ---
+# --- MENU CHUYỂN CHẾ ĐỘ HOẠT ĐỘNG TẠI THANH BÊN ---
 with st.sidebar:
-    st.header("⚙️ Thiết lập Đầu vào")
-    st.info("Bước 1: Chọn ảnh và loại ảnh")
-    
-    input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
-    input_file = None
-    if input_method == "📁 Tải ảnh lên":
-        input_file = st.file_uploader("Chọn file (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
-    else:
-        input_file = st.camera_input("Chụp ảnh ngay")
-
+    st.header("🛠️ Menu Chức Năng")
+    app_mode = st.radio("Chọn chế độ:", ["📸 Studio Xử Lý (1 Người)", "👥 Tool Ghép In A4 (2 Người)"])
     st.markdown("---")
-    st.subheader("🤖 Công nghệ AI Nhận diện")
-    if HAS_MEDIAPIPE:
-        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
-        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
-    else:
-        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
-        detector_type = "Haarcascade"
 
-    st.markdown("---")
-    st.subheader("Kích thước & Phông nền")
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP 2 NGƯỜI
+if app_mode == "👥 Tool Ghép In A4 (2 Người)":
+    st.info("💡 Hướng dẫn: Tải ảnh đơn chân dung đã chỉnh hoàn thiện từ mục Studio về máy, rồi đưa vào đây để ghép 2 người in trên cùng 1 tờ A4.")
     
-    size_option = st.radio("Chọn cỡ ảnh:", 
-                         ["4x6 cm (Hộ chiếu)", 
-                          "3.5x4.5 cm (Visa Đài Loan/Úc/Hàn/Âu)",
-                          "5x5 cm (Visa Mỹ)",
-                          "3.3x4.8 cm (Visa Trung Quốc)", 
-                          "3x4 cm (Giấy tờ)"])
-    
-    if "Visa Mỹ" in size_option: target_ratio = 1.0 
-    elif "3.5x4.5" in size_option: target_ratio = 3.5/4.5
-    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8
-    elif "3x4" in size_option: target_ratio = 3/4
-    else: target_ratio = 4/6
-    
-    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt", "Xanh GPLX"])
-    bg_map = {
-        "Trắng": (255, 255, 255, 255), 
-        "Xanh Chuẩn": (66, 135, 245, 255), 
-        "Xanh Nhạt": (135, 206, 250, 255),
-        "Xanh GPLX": (37, 133, 197, 255)
-    }
-    bg_val = bg_map.get(bg_name)
-    
-    st.markdown("---")
-    st.caption("Phiên bản V2.5.4 - PDF Fixed")
+    html_code = """
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px;}
+            .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 550px; width: 100%; text-align: center;}
+            h2 { color: #333; margin-top: 0;}
+            .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px; text-align: left;}
+            .person-box { flex: 1; border: 1.5px dashed #aaa; padding: 15px; border-radius: 8px; background: #fafafa;}
+            .person-box h4 { margin: 0 0 10px 0; color: #007bff; }
+            input[type="file"] { width: 100%; font-size: 14px; }
+            .preview { max-width: 90px; margin-top: 15px; display: none; border: 1px solid #ccc; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);}
+            button { padding: 14px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 6px; transition: background 0.3s; width: 100%; }
+            button:hover { background-color: #218838; }
+        </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Ghép 2 Người (18 Ảnh 3x4) / A4</h2>
+            <p style="font-size: 13px; color: #666; margin-bottom: 20px;">Mỗi người sẽ có 9 ảnh 3x4 xếp thành cụm. Bản in chuẩn tờ A4 có vạch chia đôi.</p>
+            
+            <div class="upload-group">
+                <div class="person-box">
+                    <h4>👤 Người thứ 1</h4>
+                    <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
+                    <center><img id="preview1" class="preview" alt="Preview 1"></center>
+                </div>
 
-# --- B. XỬ LÝ ẢNH ĐẦU VÀO ---
-if input_file:
-    current_file_key = f"{input_file.name}_{input_file.size}"
-    if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
-        if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
-        if 'base' in st.session_state: del st.session_state.base
-        gc.collect()
+                <div class="person-box">
+                    <h4>👤 Người thứ 2</h4>
+                    <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
+                    <center><img id="preview2" class="preview" alt="Preview 2"></center>
+                </div>
+            </div>
+            
+            <button id="generateBtn">Tạo & Tải Xuống PDF Khổ A4</button>
+        </div>
 
-    if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
-        with st.spinner('⏳ Đang tách nền AI...'):
-            try:
-                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
-                st.session_state.current_file_key = current_file_key
-            except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
+        <script>
+            let data1 = null, type1 = 'JPEG';
+            let data2 = null, type2 = 'JPEG';
 
-# --- C. GIAO DIỆN CHÍNH ---
+            function handleImageUpload(inputId, previewId, personNum) {
+                document.getElementById(inputId).addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        if(personNum === 1) type1 = (file.type === 'image/png') ? 'PNG' : 'JPEG';
+                        if(personNum === 2) type2 = (file.type === 'image/png') ? 'PNG' : 'JPEG';
+
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            if(personNum === 1) data1 = event.target.result;
+                            if(personNum === 2) data2 = event.target.result;
+                            
+                            const imgElement = document.getElementById(previewId);
+                            imgElement.src = event.target.result;
+                            imgElement.style.display = 'block';
+                        }
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+
+            handleImageUpload('imgInput1', 'preview1', 1);
+            handleImageUpload('imgInput2', 'preview2', 2);
+
+            document.getElementById('generateBtn').addEventListener('click', function() {
+                if (typeof window.jspdf === 'undefined') {
+                    return alert("Vui lòng kết nối Internet để tải thư viện PDF!");
+                }
+                if (!data1 || !data2) {
+                    return alert("Vui lòng tải lên đầy đủ hình ảnh cho cả 2 người!");
+                }
+
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+                    function draw9Photos(imgData, imgType, startY) {
+                        const imgWidth = 30; const imgHeight = 40;
+                        const gapX = 5; const gapY = 5;
+                        const startX = 55; 
+                        
+                        for (let row = 0; row < 3; row++) {
+                            for (let col = 0; col < 3; col++) {
+                                const x = startX + col * (imgWidth + gapX);
+                                const y = startY + row * (imgHeight + gapY);
+                                
+                                doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
+                                doc.setDrawColor(200, 200, 200); 
+                                doc.setLineWidth(0.2);
+                                doc.rect(x, y, imgWidth, imgHeight);
+                            }
+                        }
+                    }
+
+                    draw9Photos(data1, type1, 20);
+                    draw9Photos(data2, type2, 160);
+
+                    doc.setDrawColor(150, 150, 150);
+                    doc.setLineDashPattern([2, 2], 0);
+                    doc.line(10, 153, 200, 153);
+
+                    doc.save('Anh_The_3x4_2_Nguoi_A4.pdf');
+                } catch (error) {
+                    alert("Có lỗi xảy ra: " + error.message);
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=750, scrolling=True)
+    st.stop()
+
+# --- BẢN CHỈNH SỬA STUDIO GỐC SẼ ĐƯỢC CHẠY KHI ĐANG Ở CHẾ ĐỘ STUDIO ---
 col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
 with col_btn1:
     current_lvl = st.session_state.get('auto_level', 0)
@@ -637,3 +702,18 @@ with col_result:
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
+
+# --- THÔNG TIN ĐẦU VÀO ĐƯỢC CHUYỂN XUỐNG DƯỚI ĐỂ ĐẢM BẢO HOẠT ĐỘNG SIDEBAR ---
+if input_file:
+    current_file_key = f"{input_file.name}_{input_file.size}"
+    if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
+        if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
+        if 'base' in st.session_state: del st.session_state.base
+        gc.collect()
+
+    if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
+        with st.spinner('⏳ Đang tách nền AI...'):
+            try:
+                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
+                st.session_state.current_file_key = current_file_key
+            except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
