@@ -502,23 +502,17 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             input[type="file"] { width: 100%; font-size: 14px; }
             .preview { max-width: 90px; margin-top: 15px; display: none; border: 1px solid #ccc; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);}
             
-            #generateBtn { padding: 14px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 6px; transition: background 0.3s; width: 100%; }
-            #generateBtn:hover { background-color: #218838; }
+            .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 10px;}
+            .btn { padding: 14px; font-size: 15px; font-weight: bold; cursor: pointer; color: white; border: none; border-radius: 6px; transition: background 0.3s; flex: 1; }
+            #previewBtn { background-color: #17a2b8; }
+            #previewBtn:hover { background-color: #138496; }
+            #downloadBtn { background-color: #28a745; display: none; }
+            #downloadBtn:hover { background-color: #218838; }
             
-            /* Style cho nút xóa ảnh mới được thêm vào */
-            .clear-btn {
-                background-color: #dc3545;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-size: 13px;
-                cursor: pointer;
-                margin-top: 10px;
-                transition: 0.3s;
-                display: none; /* Ẩn đi khi chưa có ảnh */
-            }
+            .clear-btn { background-color: #dc3545; color: white; border: none; border-radius: 5px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 10px; transition: 0.3s; display: none; }
             .clear-btn:hover { background-color: #c82333; }
+            
+            #previewContainer { display: none; margin-top: 25px; border-top: 2px dashed #ccc; padding-top: 20px; }
         </style>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     </head>
@@ -554,15 +548,25 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                 </div>
             </div>
             
-            <button id="generateBtn">Tạo & Tải Xuống PDF Khổ A4</button>
+            <div class="btn-group">
+                <button id="previewBtn" class="btn">👁️ Xem Trước PDF</button>
+                <button id="downloadBtn" class="btn">⬇️ Tải Xuống PDF</button>
+            </div>
+            
+            <div id="previewContainer">
+                <h4 style="color: #555; margin-bottom: 10px;">📄 Bản xem trước trang in A4</h4>
+                <iframe id="pdfIframe" width="100%" height="450px" style="border: 1px solid #aaa; border-radius: 8px;"></iframe>
+            </div>
+
         </div>
 
         <script>
             let data1 = null, type1 = 'JPEG';
             let data2 = null, type2 = 'JPEG';
+            let generatedPDF = null;
+            let generatedFileName = "";
 
             function handleImageUpload(inputId, previewId, clearBtnId, personNum) {
-                // Sự kiện khi tải ảnh lên
                 document.getElementById(inputId).addEventListener('change', function(e) {
                     const file = e.target.files[0];
                     if (file) {
@@ -578,104 +582,129 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             imgElement.src = event.target.result;
                             imgElement.style.display = 'block';
                             
-                            // Hiển thị nút xóa ảnh
                             document.getElementById(clearBtnId).style.display = 'inline-block';
                         }
                         reader.readAsDataURL(file);
                     }
                 });
 
-                // Sự kiện khi bấm nút xóa ảnh
                 document.getElementById(clearBtnId).addEventListener('click', function() {
-                    // Xóa file đã chọn trong input
                     document.getElementById(inputId).value = "";
-                    // Ẩn khung preview
                     document.getElementById(previewId).style.display = 'none';
                     document.getElementById(previewId).src = "";
-                    // Ẩn chính nút xóa này đi
                     this.style.display = 'none';
-                    // Xóa data lưu trữ
                     if(personNum === 1) data1 = null;
                     if(personNum === 2) data2 = null;
+                    
+                    // Ẩn khung xem trước nếu xóa ảnh
+                    document.getElementById('previewContainer').style.display = 'none';
+                    document.getElementById('downloadBtn').style.display = 'none';
                 });
             }
 
-            // Kích hoạt hàm cho 2 khung người
             handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 1);
             handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 2);
 
-            document.getElementById('generateBtn').addEventListener('click', function() {
-                if (typeof window.jspdf === 'undefined') {
-                    return alert("Vui lòng kết nối Internet để tải thư viện PDF!");
+            // Hàm tạo file PDF chung
+            function createPDFDocument() {
+                const printSize = document.getElementById('printSize').value;
+                const { jsPDF } = window.jspdf;
+                let doc;
+
+                if (printSize === '3x4') {
+                    doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+                    function draw9Photos3x4(imgData, imgType, startY) {
+                        const imgWidth = 30, imgHeight = 40, gapX = 5, gapY = 5, startX = 55; 
+                        for (let row = 0; row < 3; row++) {
+                            for (let col = 0; col < 3; col++) {
+                                const x = startX + col * (imgWidth + gapX);
+                                const y = startY + row * (imgHeight + gapY);
+                                doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
+                                doc.setDrawColor(200, 200, 200); 
+                                doc.setLineWidth(0.2);
+                                doc.rect(x, y, imgWidth, imgHeight);
+                            }
+                        }
+                    }
+
+                    draw9Photos3x4(data1, type1, 20); 
+                    draw9Photos3x4(data2, type2, 160); 
+                    
+                    doc.setDrawColor(150, 150, 150);
+                    doc.setLineDashPattern([2, 2], 0);
+                    doc.line(10, 148.5, 200, 148.5); 
+                    
+                    return { doc: doc, fileName: 'Anh_The_3x4_2_Nguoi.pdf' };
+                } else {
+                    doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+                    
+                    function draw9Photos4x6(imgData, imgType, startX) {
+                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 10; 
+                        for (let row = 0; row < 3; row++) {
+                            for (let col = 0; col < 3; col++) {
+                                const x = startX + col * (imgWidth + gapX);
+                                const y = startY + row * (imgHeight + gapY);
+                                doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
+                                doc.setDrawColor(200, 200, 200); 
+                                doc.setLineWidth(0.2);
+                                doc.rect(x, y, imgWidth, imgHeight);
+                            }
+                        }
+                    }
+
+                    draw9Photos4x6(data1, type1, 12); 
+                    draw9Photos4x6(data2, type2, 155); 
+                    
+                    doc.setDrawColor(150, 150, 150);
+                    doc.setLineDashPattern([2, 2], 0);
+                    doc.line(148.5, 10, 148.5, 200); 
+                    
+                    return { doc: doc, fileName: 'Anh_The_4x6_2_Nguoi.pdf' };
                 }
-                if (!data1 || !data2) {
-                    return alert("Vui lòng tải lên đầy đủ hình ảnh cho cả 2 người!");
-                }
+            }
+
+            // Xử lý nút Xem Trước
+            document.getElementById('previewBtn').addEventListener('click', function() {
+                if (typeof window.jspdf === 'undefined') { return alert("Vui lòng kết nối Internet để tải thư viện PDF!"); }
+                if (!data1 || !data2) { return alert("Vui lòng tải lên đầy đủ hình ảnh cho cả 2 người!"); }
 
                 try {
-                    const printSize = document.getElementById('printSize').value;
-                    const { jsPDF } = window.jspdf;
+                    const result = createPDFDocument();
+                    generatedPDF = result.doc;
+                    generatedFileName = result.fileName;
 
-                    if (printSize === '3x4') {
-                        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-                        function draw9Photos3x4(imgData, imgType, startY) {
-                            const imgWidth = 30, imgHeight = 40, gapX = 5, gapY = 5, startX = 55; 
-                            for (let row = 0; row < 3; row++) {
-                                for (let col = 0; col < 3; col++) {
-                                    const x = startX + col * (imgWidth + gapX);
-                                    const y = startY + row * (imgHeight + gapY);
-                                    doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                    doc.setDrawColor(200, 200, 200); 
-                                    doc.setLineWidth(0.2);
-                                    doc.rect(x, y, imgWidth, imgHeight);
-                                }
-                            }
-                        }
-
-                        draw9Photos3x4(data1, type1, 20); 
-                        draw9Photos3x4(data2, type2, 160); 
-                        
-                        doc.setDrawColor(150, 150, 150);
-                        doc.setLineDashPattern([2, 2], 0);
-                        doc.line(10, 148.5, 200, 148.5); 
-                        doc.save('Anh_The_3x4_2_Nguoi.pdf');
-
-                    } else {
-                        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-                        
-                        function draw9Photos4x6(imgData, imgType, startX) {
-                            const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 10; 
-                            for (let row = 0; row < 3; row++) {
-                                for (let col = 0; col < 3; col++) {
-                                    const x = startX + col * (imgWidth + gapX);
-                                    const y = startY + row * (imgHeight + gapY);
-                                    doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                    doc.setDrawColor(200, 200, 200); 
-                                    doc.setLineWidth(0.2);
-                                    doc.rect(x, y, imgWidth, imgHeight);
-                                }
-                            }
-                        }
-
-                        draw9Photos4x6(data1, type1, 12); 
-                        draw9Photos4x6(data2, type2, 155); 
-                        
-                        doc.setDrawColor(150, 150, 150);
-                        doc.setLineDashPattern([2, 2], 0);
-                        doc.line(148.5, 10, 148.5, 200); 
-                        doc.save('Anh_The_4x6_2_Nguoi.pdf');
-                    }
+                    // Tạo Blob (chuẩn mới giúp tải siêu nhanh và không bị lỗi dung lượng)
+                    const blob = generatedPDF.output('blob');
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    // Gắn vào Iframe
+                    document.getElementById('pdfIframe').src = blobUrl;
+                    
+                    // Hiện khung xem trước và nút tải xuống
+                    document.getElementById('previewContainer').style.display = 'block';
+                    document.getElementById('downloadBtn').style.display = 'inline-block';
 
                 } catch (error) {
                     alert("Có lỗi xảy ra: " + error.message);
                 }
             });
+
+            // Xử lý nút Tải Xuống
+            document.getElementById('downloadBtn').addEventListener('click', function() {
+                if (generatedPDF) {
+                    generatedPDF.save(generatedFileName);
+                } else {
+                    alert("Vui lòng bấm Xem Trước trước khi tải xuống.");
+                }
+            });
+
         </script>
     </body>
     </html>
     """
-    components.html(html_code, height=800, scrolling=True)
+    # Nới rộng chiều cao để chứa thêm khung xem trước PDF
+    components.html(html_code, height=1200, scrolling=True)
     st.stop()
 
 
@@ -729,7 +758,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.6 - Có nút Xóa Ảnh")
+    st.caption("Phiên bản V2.5.7 - Đã thêm tính năng Xem Trước")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
