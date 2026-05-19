@@ -621,9 +621,10 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                                 const x = startX + col * (imgWidth + gapX);
                                 const y = startY + row * (imgHeight + gapY);
                                 doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                doc.setDrawColor(200, 200, 200); 
-                                doc.setLineWidth(0.2);
-                                doc.rect(x, y, imgWidth, imgHeight);
+                                // Đã bỏ phần vẽ viền khung ảnh 
+                                // doc.setDrawColor(200, 200, 200); 
+                                // doc.setLineWidth(0.2);
+                                // doc.rect(x, y, imgWidth, imgHeight);
                             }
                         }
                     }
@@ -632,11 +633,12 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     if (data1) draw9Photos3x4(data1, type1, 20); 
                     if (data2) draw9Photos3x4(data2, type2, 160); 
                     
-                    doc.setDrawColor(150, 150, 150);
-                    doc.setLineDashPattern([2, 2], 0);
-                    doc.line(10, 148.5, 200, 148.5); 
+                    // Đã bỏ đường chia đôi trang
+                    // doc.setDrawColor(150, 150, 150);
+                    // doc.setLineDashPattern([2, 2], 0);
+                    // doc.line(10, 148.5, 200, 148.5); 
                     
-                    return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_3x4_A4_KhongVien.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                     
@@ -647,9 +649,10 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                                 const x = startX + col * (imgWidth + gapX);
                                 const y = startY + row * (imgHeight + gapY);
                                 doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                doc.setDrawColor(200, 200, 200); 
-                                doc.setLineWidth(0.2);
-                                doc.rect(x, y, imgWidth, imgHeight);
+                                // Đã bỏ phần vẽ viền khung ảnh
+                                // doc.setDrawColor(200, 200, 200); 
+                                // doc.setLineWidth(0.2);
+                                // doc.rect(x, y, imgWidth, imgHeight);
                             }
                         }
                     }
@@ -658,11 +661,12 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     if (data1) draw9Photos4x6(data1, type1, 12); 
                     if (data2) draw9Photos4x6(data2, type2, 155); 
                     
-                    doc.setDrawColor(150, 150, 150);
-                    doc.setLineDashPattern([2, 2], 0);
-                    doc.line(148.5, 10, 148.5, 200); 
+                    // Đã bỏ đường chia đôi trang
+                    // doc.setDrawColor(150, 150, 150);
+                    // doc.setLineDashPattern([2, 2], 0);
+                    // doc.line(148.5, 10, 148.5, 200); 
                     
-                    return { doc: doc, fileName: 'Anh_The_4x6_A4.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_4x6_A4_KhongVien.pdf' };
                 }
             }
 
@@ -761,7 +765,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.8 - In ghép 1 hoặc 2 người")
+    st.caption("Phiên bản V2.5.9 - Bỏ hoàn toàn đường viền phân ảnh")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
