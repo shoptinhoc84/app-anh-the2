@@ -465,8 +465,8 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">THÊM SỐ ĐIỆN THOẠI HỖ TRỢ: 0939.949.752 (HUYÊN)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">STH</div>', unsafe_allow_html=True)
 
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
