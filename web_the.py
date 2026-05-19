@@ -22,7 +22,7 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ SHOPTINHOC", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ - Hỗ trợ: 0939.949.752 (Huyên)", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
@@ -465,8 +465,8 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">STH</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">THÊM SỐ ĐIỆN THOẠI HỖ TRỢ: 0939.949.752 (HUYÊN)</div>', unsafe_allow_html=True)
 
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
@@ -481,7 +481,7 @@ with st.sidebar:
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP 2 NGƯỜI
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (2 Người)":
-    st.info("💡 Hướng dẫn: Tải ảnh đơn đã chỉnh hoàn thiện ở Studio về máy, rồi đưa vào đây để ghép 2 người in trên cùng 1 tờ A4 (Hỗ trợ 3x4 và 4x6).")
+    st.info("💡 Hướng dẫn: Bạn có thể đưa ảnh 1 người hoặc 2 người vào đây để ghép lên tờ A4.")
     
     html_code = """
     <!DOCTYPE html>
@@ -518,13 +518,13 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     </head>
     <body>
         <div class="container">
-            <h2>Tool Ghép 2 Người Tự Động</h2>
+            <h2>Tool Ghép In A4 Tự Động</h2>
             
             <div class="size-selector">
                 <label>📏 Chọn Kích Thước In:</label>
                 <select id="printSize">
-                    <option value="3x4">In 18 ảnh cỡ 3x4 cm (Giấy A4 Dọc)</option>
-                    <option value="4x6">In 18 ảnh cỡ 4x6 cm (Giấy A4 Ngang)</option>
+                    <option value="3x4">In ảnh cỡ 3x4 cm (Giấy A4 Dọc)</option>
+                    <option value="4x6">In ảnh cỡ 4x6 cm (Giấy A4 Ngang)</option>
                 </select>
             </div>
             
@@ -628,14 +628,15 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                         }
                     }
 
-                    draw9Photos3x4(data1, type1, 20); 
-                    draw9Photos3x4(data2, type2, 160); 
+                    // CHỈ VẼ KHI CÓ DATA CHO PHÉP IN 1 NGƯỜI
+                    if (data1) draw9Photos3x4(data1, type1, 20); 
+                    if (data2) draw9Photos3x4(data2, type2, 160); 
                     
                     doc.setDrawColor(150, 150, 150);
                     doc.setLineDashPattern([2, 2], 0);
                     doc.line(10, 148.5, 200, 148.5); 
                     
-                    return { doc: doc, fileName: 'Anh_The_3x4_2_Nguoi.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                     
@@ -653,21 +654,24 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                         }
                     }
 
-                    draw9Photos4x6(data1, type1, 12); 
-                    draw9Photos4x6(data2, type2, 155); 
+                    // CHỈ VẼ KHI CÓ DATA CHO PHÉP IN 1 NGƯỜI
+                    if (data1) draw9Photos4x6(data1, type1, 12); 
+                    if (data2) draw9Photos4x6(data2, type2, 155); 
                     
                     doc.setDrawColor(150, 150, 150);
                     doc.setLineDashPattern([2, 2], 0);
                     doc.line(148.5, 10, 148.5, 200); 
                     
-                    return { doc: doc, fileName: 'Anh_The_4x6_2_Nguoi.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_4x6_A4.pdf' };
                 }
             }
 
             // Xử lý nút Xem Trước
             document.getElementById('previewBtn').addEventListener('click', function() {
                 if (typeof window.jspdf === 'undefined') { return alert("Vui lòng kết nối Internet để tải thư viện PDF!"); }
-                if (!data1 || !data2) { return alert("Vui lòng tải lên đầy đủ hình ảnh cho cả 2 người!"); }
+                
+                // NÂNG CẤP: CHỈ CẦN 1 TRONG 2 NGƯỜI CÓ ẢNH LÀ CHO IN
+                if (!data1 && !data2) { return alert("Vui lòng tải lên ít nhất ảnh cho 1 người!"); }
 
                 try {
                     const result = createPDFDocument();
@@ -703,7 +707,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     </body>
     </html>
     """
-    # Nới rộng chiều cao để chứa thêm khung xem trước PDF
     components.html(html_code, height=1200, scrolling=True)
     st.stop()
 
@@ -758,7 +761,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.7 - Đã thêm tính năng Xem Trước")
+    st.caption("Phiên bản V2.5.8 - In ghép 1 hoặc 2 người")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
