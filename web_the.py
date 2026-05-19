@@ -22,7 +22,7 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ - SHOPTINHOC", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ - Hỗ trợ: 0939.949.752 (Huyên)", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
@@ -362,7 +362,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -465,8 +465,8 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸  ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title"></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">THÊM SỐ ĐIỆN THOẠI HỖ TRỢ: 0939.949.752 (HUYÊN)</div>', unsafe_allow_html=True)
 
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
@@ -615,16 +615,14 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
                     function draw9Photos3x4(imgData, imgType, startY) {
-                        const imgWidth = 30, imgHeight = 40, gapX = 5, gapY = 5, startX = 55; 
+                        // GIẢM GAP XUỐNG 1MM VÀ ĐIỀU CHỈNH STARTX ĐỂ KHỐI ẢNH NẰM GIỮA TRANG
+                        const imgWidth = 30, imgHeight = 40, gapX = 1, gapY = 1, startX = 59; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
                                 const y = startY + row * (imgHeight + gapY);
                                 doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                // Đã bỏ phần vẽ viền khung ảnh 
-                                // doc.setDrawColor(200, 200, 200); 
-                                // doc.setLineWidth(0.2);
-                                // doc.rect(x, y, imgWidth, imgHeight);
+                                // BỎ VẼ VIỀN ĐỂ KHÔNG CÓ ĐƯỜNG KẺ KHI IN
                             }
                         }
                     }
@@ -633,26 +631,21 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     if (data1) draw9Photos3x4(data1, type1, 20); 
                     if (data2) draw9Photos3x4(data2, type2, 160); 
                     
-                    // Đã bỏ đường chia đôi trang
-                    // doc.setDrawColor(150, 150, 150);
-                    // doc.setLineDashPattern([2, 2], 0);
-                    // doc.line(10, 148.5, 200, 148.5); 
+                    // BỎ ĐƯỜNG CHIA ĐÔI TRANG
                     
-                    return { doc: doc, fileName: 'Anh_The_3x4_A4_KhongVien.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                     
                     function draw9Photos4x6(imgData, imgType, startX) {
+                        // GIỮ GAP GỐC VÌ 4X6 KHÔNG BỊ PHÀN NÀN VỀ KHOẢNG CÁCH XA
                         const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 10; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
                                 const y = startY + row * (imgHeight + gapY);
                                 doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                // Đã bỏ phần vẽ viền khung ảnh
-                                // doc.setDrawColor(200, 200, 200); 
-                                // doc.setLineWidth(0.2);
-                                // doc.rect(x, y, imgWidth, imgHeight);
+                                // BỎ VẼ VIỀN ĐỂ KHÔNG CÓ ĐƯỜNG KẺ KHI IN
                             }
                         }
                     }
@@ -661,12 +654,9 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     if (data1) draw9Photos4x6(data1, type1, 12); 
                     if (data2) draw9Photos4x6(data2, type2, 155); 
                     
-                    // Đã bỏ đường chia đôi trang
-                    // doc.setDrawColor(150, 150, 150);
-                    // doc.setLineDashPattern([2, 2], 0);
-                    // doc.line(148.5, 10, 148.5, 200); 
+                    // BỎ ĐƯỜNG CHIA ĐÔI TRANG
                     
-                    return { doc: doc, fileName: 'Anh_The_4x6_A4_KhongVien.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_4x6_A4.pdf' };
                 }
             }
 
@@ -765,7 +755,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.5.9 - Bỏ hoàn toàn đường viền phân ảnh")
+    st.caption("Phiên bản V2.6.0 - Đã fix sát khoảng cách in 3x4")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
