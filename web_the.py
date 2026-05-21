@@ -362,7 +362,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -549,13 +549,13 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             </div>
             
             <div class="btn-group">
-                <button id="previewBtn" class="btn">👁️ Xem Trước PDF</button>
+                <button id="previewBtn" class="btn">👁️ Xem Trước Bản In</button>
                 <button id="downloadBtn" class="btn">⬇️ Tải Xuống PDF</button>
             </div>
             
             <div id="previewContainer">
-                <h4 style="color: #555; margin-bottom: 10px;">📄 Bản xem trước trang in A4</h4>
-                <iframe id="pdfIframe" width="100%" height="450px" style="border: 1px solid #aaa; border-radius: 8px;"></iframe>
+                <h4 style="color: #555; margin-bottom: 15px;">📄 Bản xem trước A4 (Mô phỏng)</h4>
+                <div id="pdfIframeContainer"></div>
             </div>
 
         </div>
@@ -563,8 +563,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
         <script>
             let data1 = null, type1 = 'JPEG';
             let data2 = null, type2 = 'JPEG';
-            let generatedPDF = null;
-            let generatedFileName = "";
 
             function handleImageUpload(inputId, previewId, clearBtnId, personNum) {
                 document.getElementById(inputId).addEventListener('change', function(e) {
@@ -596,7 +594,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     if(personNum === 1) data1 = null;
                     if(personNum === 2) data2 = null;
                     
-                    // Ẩn khung xem trước nếu xóa ảnh
                     document.getElementById('previewContainer').style.display = 'none';
                     document.getElementById('downloadBtn').style.display = 'none';
                 });
@@ -605,7 +602,53 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 1);
             handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 2);
 
-            // Hàm tạo file PDF chung
+            // Xử lý nút Xem Trước Bằng HTML/CSS
+            document.getElementById('previewBtn').addEventListener('click', function() {
+                if (!data1 && !data2) { return alert("Vui lòng tải lên ít nhất ảnh cho 1 người!"); }
+
+                const printSize = document.getElementById('printSize').value;
+                const isLandscape = printSize === '4x6';
+                const a4Width = isLandscape ? 297 : 210;
+                const a4Height = isLandscape ? 210 : 297;
+
+                // Tạo bảng giấy A4 ảo
+                let boardHtml = `<div style="position: relative; width: 100%; max-width: ${isLandscape ? 500 : 350}px; aspect-ratio: ${a4Width}/${a4Height}; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 0 auto; border: 1px solid #ddd; overflow: hidden;">`;
+
+                function drawHtmlGrid(imgData, startX, startY, imgW, imgH, gapX, gapY) {
+                    if (!imgData) return '';
+                    let html = '';
+                    for (let row = 0; row < 3; row++) {
+                        for (let col = 0; col < 3; col++) {
+                            const x = startX + col * (imgW + gapX);
+                            const y = startY + row * (imgH + gapY);
+                            // Đổi milimet sang phần trăm để tương thích mọi màn hình
+                            const px = (x / a4Width) * 100 + '%';
+                            const py = (y / a4Height) * 100 + '%';
+                            const pw = (imgW / a4Width) * 100 + '%';
+                            const ph = (imgH / a4Height) * 100 + '%';
+                            html += `<img src="${imgData}" style="position: absolute; left: ${px}; top: ${py}; width: ${pw}; height: ${ph}; object-fit: cover; display: block; background: #eee;">`;
+                        }
+                    }
+                    return html;
+                }
+
+                // ÁP DỤNG LỀ TRÊN SIÊU MỎNG (5mm) VÀ XẾP SÁT NHAU
+                if (printSize === '3x4') {
+                    boardHtml += drawHtmlGrid(data1, 59, 5, 30, 40, 1, 1);
+                    boardHtml += drawHtmlGrid(data2, 59, 132, 30, 40, 1, 1);
+                } else {
+                    boardHtml += drawHtmlGrid(data1, 12, 5, 40, 60, 5, 5);
+                    boardHtml += drawHtmlGrid(data2, 155, 5, 40, 60, 5, 5);
+                }
+
+                boardHtml += `</div>`;
+                
+                document.getElementById('pdfIframeContainer').innerHTML = boardHtml;
+                document.getElementById('previewContainer').style.display = 'block';
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+            });
+
+            // Hàm tạo file PDF chung (Chỉ chạy khi bấm Tải Xuống)
             function createPDFDocument() {
                 const printSize = document.getElementById('printSize').value;
                 const { jsPDF } = window.jspdf;
@@ -613,87 +656,46 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
 
                 if (printSize === '3x4') {
                     doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
                     function draw9Photos3x4(imgData, imgType, startY) {
-                        // GIẢM GAP XUỐNG 1MM VÀ ĐIỀU CHỈNH STARTX ĐỂ KHỐI ẢNH NẰM GIỮA TRANG
                         const imgWidth = 30, imgHeight = 40, gapX = 1, gapY = 1, startX = 59; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
                                 const y = startY + row * (imgHeight + gapY);
                                 doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                // BỎ VẼ VIỀN ĐỂ KHÔNG CÓ ĐƯỜNG KẺ KHI IN
                             }
                         }
                     }
-
-                    // CHỈ VẼ KHI CÓ DATA CHO PHÉP IN 1 NGƯỜI
-                    if (data1) draw9Photos3x4(data1, type1, 20); 
-                    if (data2) draw9Photos3x4(data2, type2, 160); 
-                    
-                    // BỎ ĐƯỜNG CHIA ĐÔI TRANG
-                    
+                    // ĐẨY SÁT LÊN LỀ TRÊN CÁCH 5MM, NGƯỜI 2 NỐI TIẾP NGAY BÊN DƯỚI
+                    if (data1) draw9Photos3x4(data1, type1, 5); 
+                    if (data2) draw9Photos3x4(data2, type2, 132); 
                     return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-                    
                     function draw9Photos4x6(imgData, imgType, startX) {
-                        // GIỮ GAP GỐC VÌ 4X6 KHÔNG BỊ PHÀN NÀN VỀ KHOẢNG CÁCH XA
-                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 10; 
+                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 5; // Đẩy lề trên còn 5mm
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
                                 const y = startY + row * (imgHeight + gapY);
                                 doc.addImage(imgData, imgType, x, y, imgWidth, imgHeight);
-                                // BỎ VẼ VIỀN ĐỂ KHÔNG CÓ ĐƯỜNG KẺ KHI IN
                             }
                         }
                     }
-
-                    // CHỈ VẼ KHI CÓ DATA CHO PHÉP IN 1 NGƯỜI
                     if (data1) draw9Photos4x6(data1, type1, 12); 
                     if (data2) draw9Photos4x6(data2, type2, 155); 
-                    
-                    // BỎ ĐƯỜNG CHIA ĐÔI TRANG
-                    
                     return { doc: doc, fileName: 'Anh_The_4x6_A4.pdf' };
                 }
             }
 
-            // Xử lý nút Xem Trước
-            document.getElementById('previewBtn').addEventListener('click', function() {
-                if (typeof window.jspdf === 'undefined') { return alert("Vui lòng kết nối Internet để tải thư viện PDF!"); }
-                
-                // NÂNG CẤP: CHỈ CẦN 1 TRONG 2 NGƯỜI CÓ ẢNH LÀ CHO IN
-                if (!data1 && !data2) { return alert("Vui lòng tải lên ít nhất ảnh cho 1 người!"); }
-
-                try {
-                    const result = createPDFDocument();
-                    generatedPDF = result.doc;
-                    generatedFileName = result.fileName;
-
-                    // Tạo Blob (chuẩn mới giúp tải siêu nhanh và không bị lỗi dung lượng)
-                    const blob = generatedPDF.output('blob');
-                    const blobUrl = URL.createObjectURL(blob);
-                    
-                    // Gắn vào Iframe
-                    document.getElementById('pdfIframe').src = blobUrl;
-                    
-                    // Hiện khung xem trước và nút tải xuống
-                    document.getElementById('previewContainer').style.display = 'block';
-                    document.getElementById('downloadBtn').style.display = 'inline-block';
-
-                } catch (error) {
-                    alert("Có lỗi xảy ra: " + error.message);
-                }
-            });
-
             // Xử lý nút Tải Xuống
             document.getElementById('downloadBtn').addEventListener('click', function() {
-                if (generatedPDF) {
-                    generatedPDF.save(generatedFileName);
-                } else {
-                    alert("Vui lòng bấm Xem Trước trước khi tải xuống.");
+                if (typeof window.jspdf === 'undefined') { return alert("Vui lòng kết nối Internet để tải thư viện PDF!"); }
+                try {
+                    const result = createPDFDocument();
+                    result.doc.save(result.fileName);
+                } catch (error) {
+                    alert("Có lỗi xảy ra khi tạo PDF: " + error.message);
                 }
             });
 
@@ -701,7 +703,7 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     </body>
     </html>
     """
-    components.html(html_code, height=1200, scrolling=True)
+    components.html(html_code, height=1300, scrolling=True)
     st.stop()
 
 
@@ -755,7 +757,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.6.0 - Đã fix sát khoảng cách in 3x4")
+    st.caption("Phiên bản V2.6.2 - Đẩy sát lề trên tối ưu giấy in")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
