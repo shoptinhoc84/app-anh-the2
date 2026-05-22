@@ -465,7 +465,7 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸 ẢNH THẺ</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">SHOPTINHOC</div>', unsafe_allow_html=True)
 
 if not HAS_FPDF:
