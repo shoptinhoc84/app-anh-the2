@@ -22,7 +22,7 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ - SHOPTINHOC, layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ - SHOPTINHOC", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
