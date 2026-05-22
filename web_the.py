@@ -22,7 +22,7 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ - Hỗ trợ: 0939.949.752 (Huyên)", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ SHOPTINHOC", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
@@ -31,15 +31,8 @@ st.markdown("""
         color: #B22222;
         text-align: center;
         font-weight: 800;
-        margin-bottom: 5px;
-        text-shadow: 2px 2px 4px #cccccc;
-    }
-    .sub-title {
-        font-size: 1.2rem;
-        color: #555;
-        text-align: center;
-        font-weight: bold;
         margin-bottom: 20px;
+        text-shadow: 2px 2px 4px #cccccc;
     }
     div[data-testid="stButton"] > button:first-child {
         border-radius: 10px;
@@ -465,8 +458,7 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">THÊM SỐ ĐIỆN THOẠI HỖ TRỢ: 0939.949.752 (HUYÊN)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
@@ -813,7 +805,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.6.4 - Nâng cấp in tự động 4 người")
+    st.caption("Phiên bản V2.6.5 - Đã xóa thông tin liên hệ")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
