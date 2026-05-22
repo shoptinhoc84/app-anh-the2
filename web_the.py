@@ -482,38 +482,91 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body { font-family: Arial, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px;}
-            .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 600px; width: 100%; text-align: center;}
-            h2 { color: #333; margin-top: 0;}
-            .size-selector { margin-bottom: 20px; text-align: left; background: #e9ecef; padding: 15px; border-radius: 8px;}
-            .size-selector label { font-weight: bold; color: #444; }
-            .size-selector select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; font-size: 15px; cursor: pointer;}
-            .upload-group { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 15px; text-align: left;}
-            .person-box { flex: 1; border: 1.5px dashed #aaa; padding: 10px; border-radius: 8px; background: #fafafa;}
-            .person-box h4 { margin: 0 0 10px 0; color: #007bff; font-size: 14px;}
-            input[type="file"] { width: 100%; font-size: 12px; }
-            .preview { max-width: 80px; margin-top: 10px; display: none; border: 1px solid #ccc; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);}
+            /* Nền & Font chữ */
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
+                display: flex; justify-content: center; align-items: center; 
+                min-height: 100vh; margin: 0; padding: 20px;
+            }
             
-            .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 20px;}
-            .btn { padding: 14px; font-size: 15px; font-weight: bold; cursor: pointer; color: white; border: none; border-radius: 6px; transition: background 0.3s; flex: 1; }
-            #previewBtn { background-color: #17a2b8; }
-            #previewBtn:hover { background-color: #138496; }
-            #downloadBtn { background-color: #28a745; display: none; }
-            #downloadBtn:hover { background-color: #218838; }
+            /* Container chính */
+            .container { 
+                background: #ffffff; padding: 35px; border-radius: 20px; 
+                box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 650px; width: 100%; text-align: center;
+            }
+            h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
             
-            .clear-btn { background-color: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12px; cursor: pointer; margin-top: 8px; transition: 0.3s; display: none; }
-            .clear-btn:hover { background-color: #c82333; }
+            /* Bảng chọn kích thước */
+            .size-selector { 
+                background: linear-gradient(to right, #f8f9fa, #e9ecef); padding: 18px; 
+                border-radius: 12px; border-left: 5px solid #007bff; margin-bottom: 25px; text-align: left;
+            }
+            .size-selector label { font-weight: 700; color: #495057; font-size: 15px;}
+            .size-selector select { 
+                width: 100%; padding: 12px; margin-top: 8px; border-radius: 8px; 
+                border: 1px solid #ced4da; font-size: 15px; cursor: pointer; outline: none; transition: border-color 0.3s;
+            }
+            .size-selector select:focus { border-color: #007bff; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); }
             
-            #previewContainer { display: none; margin-top: 25px; border-top: 2px dashed #ccc; padding-top: 20px; }
+            /* Nhóm Box Tải Ảnh */
+            .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px;}
+            .person-box { 
+                flex: 1; border: 2px dashed #b8c2cc; padding: 20px 10px; border-radius: 14px; 
+                background: #fafafa; transition: all 0.3s ease; position: relative;
+            }
+            .person-box:hover { border-color: #007bff; background: #f0f7ff; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,123,255,0.08);}
+            .person-box h4 { margin: 0 0 15px 0; color: #0056b3; font-size: 15px; font-weight: 700;}
+            
+            /* Nút Chọn Ảnh Tùy Chỉnh (Ẩn input mặc định) */
+            input[type="file"] { display: none; }
+            .custom-file-upload { 
+                display: inline-block; padding: 10px 15px; cursor: pointer; background-color: #edf2f7; 
+                color: #4a5568; border-radius: 8px; font-weight: 600; font-size: 13px; 
+                transition: all 0.2s; border: 1px solid #e2e8f0; width: 85%; margin: 0 auto;
+            }
+            .custom-file-upload:hover { background-color: #e2e8f0; color: #2d3748; }
+            
+            /* Khung Hình Ảnh & Nút Xóa (✖) */
+            .img-wrapper { position: relative; display: inline-block; margin-top: 15px; }
+            .preview { 
+                max-width: 90px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+                border: 2px solid #fff; display: none;
+            }
+            .clear-btn { 
+                position: absolute; top: -10px; right: -10px; background: #ff4757; color: white; 
+                border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; 
+                font-weight: bold; cursor: pointer; display: none; align-items: center; justify-content: center; 
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: transform 0.2s; padding: 0;
+            }
+            .clear-btn:hover { transform: scale(1.15); background: #c82333; }
+            
+            /* Nút Bấm Cuối Cùng */
+            .btn-group { display: flex; gap: 15px; justify-content: center; margin-top: 30px;}
+            .btn { 
+                border-radius: 50px; padding: 16px 25px; font-size: 15px; font-weight: 700; 
+                text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; color: white; border: none; 
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: all 0.3s ease; flex: 1; 
+            }
+            #previewBtn { background: linear-gradient(135deg, #36D1DC 0%, #5B86E5 100%); }
+            #previewBtn:hover { box-shadow: 0 6px 20px rgba(91,134,229,0.4); transform: translateY(-2px); }
+            #downloadBtn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); display: none; }
+            #downloadBtn:hover { box-shadow: 0 6px 20px rgba(56,239,125,0.4); transform: translateY(-2px); }
+            
+            /* Khung Xem Trước */
+            #previewContainer { 
+                display: none; margin-top: 35px; border-top: 2px dashed #e2e8f0; padding-top: 25px; 
+            }
+            #previewContainer h4 { color: #4a5568; margin-bottom: 20px; font-weight: 700;}
         </style>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     </head>
     <body>
         <div class="container">
-            <h2>Tool Ghép In A4 Tự Động</h2>
+            <h2>GIAO DIỆN IN A4 (2 - 4 NGƯỜI)</h2>
             
             <div class="size-selector">
-                <label>📏 Chọn Kích Thước In:</label>
+                <label>📏 CHỌN KÍCH THƯỚC IN:</label>
                 <select id="printSize">
                     <option value="3x4">In ảnh cỡ 3x4 cm (Xếp 4 người/Tờ A4)</option>
                     <option value="4x6">In ảnh cỡ 4x6 cm (Xếp 2 người/Tờ A4, tự tràn trang 2)</option>
@@ -523,18 +576,24 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             <div class="upload-group">
                 <div class="person-box">
                     <h4>👤 Người thứ 1</h4>
+                    <label for="imgInput1" class="custom-file-upload" id="labelInput1">📁 Chọn Ảnh...</label>
                     <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
                     <center>
-                        <img id="preview1" class="preview" alt="Preview 1">
-                        <button id="clearBtn1" class="clear-btn">❌ Xóa ảnh</button>
+                        <div class="img-wrapper">
+                            <img id="preview1" class="preview" alt="Preview 1">
+                            <button id="clearBtn1" class="clear-btn" title="Xóa ảnh này">✖</button>
+                        </div>
                     </center>
                 </div>
                 <div class="person-box">
                     <h4>👤 Người thứ 2</h4>
+                    <label for="imgInput2" class="custom-file-upload" id="labelInput2">📁 Chọn Ảnh...</label>
                     <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
                     <center>
-                        <img id="preview2" class="preview" alt="Preview 2">
-                        <button id="clearBtn2" class="clear-btn">❌ Xóa ảnh</button>
+                        <div class="img-wrapper">
+                            <img id="preview2" class="preview" alt="Preview 2">
+                            <button id="clearBtn2" class="clear-btn" title="Xóa ảnh này">✖</button>
+                        </div>
                     </center>
                 </div>
             </div>
@@ -542,29 +601,35 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             <div class="upload-group">
                 <div class="person-box">
                     <h4>👤 Người thứ 3</h4>
+                    <label for="imgInput3" class="custom-file-upload" id="labelInput3">📁 Chọn Ảnh...</label>
                     <input type="file" id="imgInput3" accept="image/png, image/jpeg, image/jpg">
                     <center>
-                        <img id="preview3" class="preview" alt="Preview 3">
-                        <button id="clearBtn3" class="clear-btn">❌ Xóa ảnh</button>
+                        <div class="img-wrapper">
+                            <img id="preview3" class="preview" alt="Preview 3">
+                            <button id="clearBtn3" class="clear-btn" title="Xóa ảnh này">✖</button>
+                        </div>
                     </center>
                 </div>
                 <div class="person-box">
                     <h4>👤 Người thứ 4</h4>
+                    <label for="imgInput4" class="custom-file-upload" id="labelInput4">📁 Chọn Ảnh...</label>
                     <input type="file" id="imgInput4" accept="image/png, image/jpeg, image/jpg">
                     <center>
-                        <img id="preview4" class="preview" alt="Preview 4">
-                        <button id="clearBtn4" class="clear-btn">❌ Xóa ảnh</button>
+                        <div class="img-wrapper">
+                            <img id="preview4" class="preview" alt="Preview 4">
+                            <button id="clearBtn4" class="clear-btn" title="Xóa ảnh này">✖</button>
+                        </div>
                     </center>
                 </div>
             </div>
             
             <div class="btn-group">
-                <button id="previewBtn" class="btn">👁️ Xem Trước Bản In</button>
-                <button id="downloadBtn" class="btn">⬇️ Tải Xuống PDF</button>
+                <button id="previewBtn" class="btn">👁️ Xem Trước</button>
+                <button id="downloadBtn" class="btn">⬇️ Tải PDF</button>
             </div>
             
             <div id="previewContainer">
-                <h4 style="color: #555; margin-bottom: 15px;">📄 Bản xem trước trang in (Mô phỏng)</h4>
+                <h4>📄 BẢN XEM TRƯỚC TRANG IN (Mô phỏng)</h4>
                 <div id="pdfIframeContainer"></div>
             </div>
 
@@ -576,7 +641,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             let data3 = null, type3 = 'JPEG';
             let data4 = null, type4 = 'JPEG';
 
-            function handleImageUpload(inputId, previewId, clearBtnId, personNum) {
+            function handleImageUpload(inputId, previewId, clearBtnId, labelId, personNum) {
                 document.getElementById(inputId).addEventListener('change', function(e) {
                     const file = e.target.files[0];
                     if (file) {
@@ -597,7 +662,11 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                             imgElement.src = event.target.result;
                             imgElement.style.display = 'block';
                             
-                            document.getElementById(clearBtnId).style.display = 'inline-block';
+                            document.getElementById(clearBtnId).style.display = 'flex';
+                            document.getElementById(labelId).innerHTML = '🔄 Đổi Ảnh Khác';
+                            document.getElementById(labelId).style.backgroundColor = '#e6f7ff';
+                            document.getElementById(labelId).style.borderColor = '#91caff';
+                            document.getElementById(labelId).style.color = '#0050b3';
                         }
                         reader.readAsDataURL(file);
                     }
@@ -608,6 +677,12 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     document.getElementById(previewId).style.display = 'none';
                     document.getElementById(previewId).src = "";
                     this.style.display = 'none';
+                    
+                    document.getElementById(labelId).innerHTML = '📁 Chọn Ảnh...';
+                    document.getElementById(labelId).style.backgroundColor = '#edf2f7';
+                    document.getElementById(labelId).style.borderColor = '#e2e8f0';
+                    document.getElementById(labelId).style.color = '#4a5568';
+                    
                     if(personNum === 1) data1 = null;
                     if(personNum === 2) data2 = null;
                     if(personNum === 3) data3 = null;
@@ -618,10 +693,10 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 });
             }
 
-            handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 1);
-            handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 2);
-            handleImageUpload('imgInput3', 'preview3', 'clearBtn3', 3);
-            handleImageUpload('imgInput4', 'preview4', 'clearBtn4', 4);
+            handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 'labelInput1', 1);
+            handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 'labelInput2', 2);
+            handleImageUpload('imgInput3', 'preview3', 'clearBtn3', 'labelInput3', 3);
+            handleImageUpload('imgInput4', 'preview4', 'clearBtn4', 'labelInput4', 4);
 
             // Xử lý nút Xem Trước Bằng HTML/CSS
             document.getElementById('previewBtn').addEventListener('click', function() {
@@ -633,7 +708,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 const a4Height = isLandscape ? 210 : 297;
 
                 function createBoard() {
-                    return `<div style="position: relative; width: 100%; max-width: ${isLandscape ? 550 : 400}px; aspect-ratio: ${a4Width}/${a4Height}; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 0 auto 20px auto; border: 1px solid #ddd; overflow: hidden;">`;
+                    return `<div style="position: relative; width: 100%; max-width: ${isLandscape ? 550 : 400}px; aspect-ratio: ${a4Width}/${a4Height}; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 0 auto 25px auto; border: 1px solid #ddd; overflow: hidden; border-radius: 4px;">`;
                 }
 
                 function drawHtmlGrid(imgData, startX, startY, imgW, imgH, gapX, gapY) {
@@ -707,7 +782,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     if (data3) draw9Photos3x4(data3, type3, 5, 135); 
                     if (data4) draw9Photos3x4(data4, type4, 110, 135); 
                     
-                    return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_3x4_A4_SHOPTINHOC.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                     function draw9Photos4x6(imgData, imgType, startX, startY) {
@@ -732,7 +807,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         if (data4) draw9Photos4x6(data4, type4, 155, 5); 
                     }
                     
-                    return { doc: doc, fileName: 'Anh_The_4x6_A4.pdf' };
+                    return { doc: doc, fileName: 'Anh_The_4x6_A4_SHOPTINHOC.pdf' };
                 }
             }
 
@@ -751,7 +826,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     </body>
     </html>
     """
-    components.html(html_code, height=1600, scrolling=True)
+    components.html(html_code, height=1700, scrolling=True)
     st.stop()
 
 
@@ -805,7 +880,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.6.5 - Đã xóa thông tin liên hệ")
+    st.caption("Phiên bản V2.6.6 - Nâng cấp Giao Diện In (UI/UX)")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
