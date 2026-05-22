@@ -22,7 +22,7 @@ except ImportError:
     HAS_FPDF = False
 
 # --- 1. CẤU HÌNH TRANG & CSS TRANG TRÍ ---
-st.set_page_config(page_title="Studio Ảnh Thẻ -", layout="wide", page_icon="📸")
+st.set_page_config(page_title="Studio Ảnh Thẻ - Hỗ trợ: 0939.949.752 (Huyên)", layout="wide", page_icon="📸")
 
 st.markdown("""
 <style>
@@ -465,8 +465,8 @@ def create_print_layout_preview(img_person, size_type):
 
 # --- 3. GIAO DIỆN CHÍNH ---
 
-st.markdown('<div class="main-title">📸 ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">WELCOME 2026</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">THÊM SỐ ĐIỆN THOẠI HỖ TRỢ: 0939.949.752 (HUYÊN)</div>', unsafe_allow_html=True)
 
 if not HAS_FPDF:
     st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
@@ -474,14 +474,14 @@ if not HAS_FPDF:
 # --- MENU CHUYỂN CHẾ ĐỘ HOẠT ĐỘNG TẠI THANH BÊN ---
 with st.sidebar:
     st.header("🛠️ Menu Chức Năng")
-    app_mode = st.radio("Chọn chế độ:", ["📸 Studio Xử Lý (1 Người)", "👥 Tool Ghép In A4 (2 Người)"])
+    app_mode = st.radio("Chọn chế độ:", ["📸 Studio Xử Lý (1 Người)", "👥 Tool Ghép In A4 (Số lượng lớn)"])
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP 2 NGƯỜI
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN
 # ==============================================================================
-if app_mode == "👥 Tool Ghép In A4 (2 Người)":
-    st.info("💡 Hướng dẫn: Bạn có thể đưa ảnh 1 người hoặc 2 người vào đây để ghép lên tờ A4.")
+if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
+    st.info("💡 Hướng dẫn: Tải ảnh (1 đến 4 người) vào đây để xếp tự động. Khổ 3x4 xếp tối đa 4 người/A4. Khổ 4x6 xếp 2 người/A4 (thêm người tự qua trang 2).")
     
     html_code = """
     <!DOCTYPE html>
@@ -491,25 +491,25 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body { font-family: Arial, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 10px;}
-            .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 580px; width: 100%; text-align: center;}
+            .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 600px; width: 100%; text-align: center;}
             h2 { color: #333; margin-top: 0;}
             .size-selector { margin-bottom: 20px; text-align: left; background: #e9ecef; padding: 15px; border-radius: 8px;}
             .size-selector label { font-weight: bold; color: #444; }
             .size-selector select { width: 100%; padding: 10px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; font-size: 15px; cursor: pointer;}
-            .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px; text-align: left;}
-            .person-box { flex: 1; border: 1.5px dashed #aaa; padding: 15px; border-radius: 8px; background: #fafafa;}
-            .person-box h4 { margin: 0 0 10px 0; color: #007bff; }
-            input[type="file"] { width: 100%; font-size: 14px; }
-            .preview { max-width: 90px; margin-top: 15px; display: none; border: 1px solid #ccc; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);}
+            .upload-group { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 15px; text-align: left;}
+            .person-box { flex: 1; border: 1.5px dashed #aaa; padding: 10px; border-radius: 8px; background: #fafafa;}
+            .person-box h4 { margin: 0 0 10px 0; color: #007bff; font-size: 14px;}
+            input[type="file"] { width: 100%; font-size: 12px; }
+            .preview { max-width: 80px; margin-top: 10px; display: none; border: 1px solid #ccc; border-radius: 4px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);}
             
-            .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 10px;}
+            .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 20px;}
             .btn { padding: 14px; font-size: 15px; font-weight: bold; cursor: pointer; color: white; border: none; border-radius: 6px; transition: background 0.3s; flex: 1; }
             #previewBtn { background-color: #17a2b8; }
             #previewBtn:hover { background-color: #138496; }
             #downloadBtn { background-color: #28a745; display: none; }
             #downloadBtn:hover { background-color: #218838; }
             
-            .clear-btn { background-color: #dc3545; color: white; border: none; border-radius: 5px; padding: 6px 12px; font-size: 13px; cursor: pointer; margin-top: 10px; transition: 0.3s; display: none; }
+            .clear-btn { background-color: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12px; cursor: pointer; margin-top: 8px; transition: 0.3s; display: none; }
             .clear-btn:hover { background-color: #c82333; }
             
             #previewContainer { display: none; margin-top: 25px; border-top: 2px dashed #ccc; padding-top: 20px; }
@@ -523,8 +523,8 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             <div class="size-selector">
                 <label>📏 Chọn Kích Thước In:</label>
                 <select id="printSize">
-                    <option value="3x4">In ảnh cỡ 3x4 cm (Giấy A4 Dọc)</option>
-                    <option value="4x6">In ảnh cỡ 4x6 cm (Giấy A4 Ngang)</option>
+                    <option value="3x4">In ảnh cỡ 3x4 cm (Xếp 4 người/Tờ A4)</option>
+                    <option value="4x6">In ảnh cỡ 4x6 cm (Xếp 2 người/Tờ A4, tự tràn trang 2)</option>
                 </select>
             </div>
             
@@ -537,13 +537,31 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                         <button id="clearBtn1" class="clear-btn">❌ Xóa ảnh</button>
                     </center>
                 </div>
-
                 <div class="person-box">
                     <h4>👤 Người thứ 2</h4>
                     <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
                     <center>
                         <img id="preview2" class="preview" alt="Preview 2">
                         <button id="clearBtn2" class="clear-btn">❌ Xóa ảnh</button>
+                    </center>
+                </div>
+            </div>
+
+            <div class="upload-group">
+                <div class="person-box">
+                    <h4>👤 Người thứ 3</h4>
+                    <input type="file" id="imgInput3" accept="image/png, image/jpeg, image/jpg">
+                    <center>
+                        <img id="preview3" class="preview" alt="Preview 3">
+                        <button id="clearBtn3" class="clear-btn">❌ Xóa ảnh</button>
+                    </center>
+                </div>
+                <div class="person-box">
+                    <h4>👤 Người thứ 4</h4>
+                    <input type="file" id="imgInput4" accept="image/png, image/jpeg, image/jpg">
+                    <center>
+                        <img id="preview4" class="preview" alt="Preview 4">
+                        <button id="clearBtn4" class="clear-btn">❌ Xóa ảnh</button>
                     </center>
                 </div>
             </div>
@@ -554,7 +572,7 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
             </div>
             
             <div id="previewContainer">
-                <h4 style="color: #555; margin-bottom: 15px;">📄 Bản xem trước A4 (Mô phỏng)</h4>
+                <h4 style="color: #555; margin-bottom: 15px;">📄 Bản xem trước trang in (Mô phỏng)</h4>
                 <div id="pdfIframeContainer"></div>
             </div>
 
@@ -563,18 +581,25 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
         <script>
             let data1 = null, type1 = 'JPEG';
             let data2 = null, type2 = 'JPEG';
+            let data3 = null, type3 = 'JPEG';
+            let data4 = null, type4 = 'JPEG';
 
             function handleImageUpload(inputId, previewId, clearBtnId, personNum) {
                 document.getElementById(inputId).addEventListener('change', function(e) {
                     const file = e.target.files[0];
                     if (file) {
-                        if(personNum === 1) type1 = (file.type === 'image/png') ? 'PNG' : 'JPEG';
-                        if(personNum === 2) type2 = (file.type === 'image/png') ? 'PNG' : 'JPEG';
+                        let type = (file.type === 'image/png') ? 'PNG' : 'JPEG';
+                        if(personNum === 1) type1 = type;
+                        if(personNum === 2) type2 = type;
+                        if(personNum === 3) type3 = type;
+                        if(personNum === 4) type4 = type;
 
                         const reader = new FileReader();
                         reader.onload = function(event) {
                             if(personNum === 1) data1 = event.target.result;
                             if(personNum === 2) data2 = event.target.result;
+                            if(personNum === 3) data3 = event.target.result;
+                            if(personNum === 4) data4 = event.target.result;
                             
                             const imgElement = document.getElementById(previewId);
                             imgElement.src = event.target.result;
@@ -593,6 +618,8 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     this.style.display = 'none';
                     if(personNum === 1) data1 = null;
                     if(personNum === 2) data2 = null;
+                    if(personNum === 3) data3 = null;
+                    if(personNum === 4) data4 = null;
                     
                     document.getElementById('previewContainer').style.display = 'none';
                     document.getElementById('downloadBtn').style.display = 'none';
@@ -601,18 +628,21 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
 
             handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 1);
             handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 2);
+            handleImageUpload('imgInput3', 'preview3', 'clearBtn3', 3);
+            handleImageUpload('imgInput4', 'preview4', 'clearBtn4', 4);
 
             // Xử lý nút Xem Trước Bằng HTML/CSS
             document.getElementById('previewBtn').addEventListener('click', function() {
-                if (!data1 && !data2) { return alert("Vui lòng tải lên ít nhất ảnh cho 1 người!"); }
+                if (!data1 && !data2 && !data3 && !data4) { return alert("Vui lòng tải lên ít nhất ảnh cho 1 người!"); }
 
                 const printSize = document.getElementById('printSize').value;
                 const isLandscape = printSize === '4x6';
                 const a4Width = isLandscape ? 297 : 210;
                 const a4Height = isLandscape ? 210 : 297;
 
-                // Tạo bảng giấy A4 ảo
-                let boardHtml = `<div style="position: relative; width: 100%; max-width: ${isLandscape ? 500 : 350}px; aspect-ratio: ${a4Width}/${a4Height}; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 0 auto; border: 1px solid #ddd; overflow: hidden;">`;
+                function createBoard() {
+                    return `<div style="position: relative; width: 100%; max-width: ${isLandscape ? 550 : 400}px; aspect-ratio: ${a4Width}/${a4Height}; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 0 auto 20px auto; border: 1px solid #ddd; overflow: hidden;">`;
+                }
 
                 function drawHtmlGrid(imgData, startX, startY, imgW, imgH, gapX, gapY) {
                     if (!imgData) return '';
@@ -621,7 +651,6 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                         for (let col = 0; col < 3; col++) {
                             const x = startX + col * (imgW + gapX);
                             const y = startY + row * (imgH + gapY);
-                            // Đổi milimet sang phần trăm để tương thích mọi màn hình
                             const px = (x / a4Width) * 100 + '%';
                             const py = (y / a4Height) * 100 + '%';
                             const pw = (imgW / a4Width) * 100 + '%';
@@ -632,23 +661,38 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     return html;
                 }
 
-                // ĐÃ FIX ĐẨY START_X VỀ 5mm ĐỂ SÁT LỀ TRÁI TIẾT KIỆM GIẤY
-                if (printSize === '3x4') {
-                    boardHtml += drawHtmlGrid(data1, 5, 5, 30, 40, 1, 1);
-                    boardHtml += drawHtmlGrid(data2, 5, 132, 30, 40, 1, 1);
-                } else {
-                    boardHtml += drawHtmlGrid(data1, 12, 5, 40, 60, 5, 5);
-                    boardHtml += drawHtmlGrid(data2, 155, 5, 40, 60, 5, 5);
-                }
+                let finalHtml = '';
 
-                boardHtml += `</div>`;
+                // BỐ CỤC 3x4 (4 NGƯỜI / 1 TRANG A4 DỌC)
+                if (printSize === '3x4') {
+                    finalHtml += createBoard();
+                    finalHtml += drawHtmlGrid(data1, 5, 5, 30, 40, 1, 1);     // Top-Left
+                    finalHtml += drawHtmlGrid(data2, 110, 5, 30, 40, 1, 1);   // Top-Right
+                    finalHtml += drawHtmlGrid(data3, 5, 135, 30, 40, 1, 1);   // Bottom-Left
+                    finalHtml += drawHtmlGrid(data4, 110, 135, 30, 40, 1, 1); // Bottom-Right
+                    finalHtml += `</div>`;
+                } 
+                // BỐ CỤC 4x6 (2 NGƯỜI / TRANG 1, NẾU THÊM SẼ QUA TRANG 2)
+                else {
+                    finalHtml += createBoard(); // Trang 1
+                    finalHtml += drawHtmlGrid(data1, 12, 5, 40, 60, 5, 5);
+                    finalHtml += drawHtmlGrid(data2, 155, 5, 40, 60, 5, 5);
+                    finalHtml += `</div>`;
+                    
+                    if (data3 || data4) {
+                        finalHtml += createBoard(); // Trang 2
+                        finalHtml += drawHtmlGrid(data3, 12, 5, 40, 60, 5, 5);
+                        finalHtml += drawHtmlGrid(data4, 155, 5, 40, 60, 5, 5);
+                        finalHtml += `</div>`;
+                    }
+                }
                 
-                document.getElementById('pdfIframeContainer').innerHTML = boardHtml;
+                document.getElementById('pdfIframeContainer').innerHTML = finalHtml;
                 document.getElementById('previewContainer').style.display = 'block';
                 document.getElementById('downloadBtn').style.display = 'inline-block';
             });
 
-            // Hàm tạo file PDF chung (Chỉ chạy khi bấm Tải Xuống)
+            // Hàm tạo file PDF
             function createPDFDocument() {
                 const printSize = document.getElementById('printSize').value;
                 const { jsPDF } = window.jspdf;
@@ -656,9 +700,8 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
 
                 if (printSize === '3x4') {
                     doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                    function draw9Photos3x4(imgData, imgType, startY) {
-                        // ĐÃ FIX ĐẨY START_X VỀ 5mm ĐỂ SÁT LỀ TRÁI 
-                        const imgWidth = 30, imgHeight = 40, gapX = 1, gapY = 1, startX = 5; 
+                    function draw9Photos3x4(imgData, imgType, startX, startY) {
+                        const imgWidth = 30, imgHeight = 40, gapX = 1, gapY = 1; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
@@ -667,13 +710,16 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             }
                         }
                     }
-                    if (data1) draw9Photos3x4(data1, type1, 5); 
-                    if (data2) draw9Photos3x4(data2, type2, 132); 
+                    if (data1) draw9Photos3x4(data1, type1, 5, 5); 
+                    if (data2) draw9Photos3x4(data2, type2, 110, 5); 
+                    if (data3) draw9Photos3x4(data3, type3, 5, 135); 
+                    if (data4) draw9Photos3x4(data4, type4, 110, 135); 
+                    
                     return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-                    function draw9Photos4x6(imgData, imgType, startX) {
-                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 5; 
+                    function draw9Photos4x6(imgData, imgType, startX, startY) {
+                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
@@ -682,8 +728,18 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             }
                         }
                     }
-                    if (data1) draw9Photos4x6(data1, type1, 12); 
-                    if (data2) draw9Photos4x6(data2, type2, 155); 
+                    
+                    // Trang 1
+                    if (data1) draw9Photos4x6(data1, type1, 12, 5); 
+                    if (data2) draw9Photos4x6(data2, type2, 155, 5); 
+                    
+                    // Thêm Trang 2 nếu có người 3, 4
+                    if (data3 || data4) {
+                        doc.addPage();
+                        if (data3) draw9Photos4x6(data3, type3, 12, 5); 
+                        if (data4) draw9Photos4x6(data4, type4, 155, 5); 
+                    }
+                    
                     return { doc: doc, fileName: 'Anh_The_4x6_A4.pdf' };
                 }
             }
@@ -703,7 +759,7 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
     </body>
     </html>
     """
-    components.html(html_code, height=1300, scrolling=True)
+    components.html(html_code, height=1600, scrolling=True)
     st.stop()
 
 
@@ -757,7 +813,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.6.3 - Canh lề trái tiết kiệm giấy")
+    st.caption("Phiên bản V2.6.4 - Nâng cấp in tự động 4 người")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
