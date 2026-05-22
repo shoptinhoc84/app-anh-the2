@@ -632,10 +632,10 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                     return html;
                 }
 
-                // ÁP DỤNG LỀ TRÊN SIÊU MỎNG (5mm) VÀ XẾP SÁT NHAU
+                // ĐÃ FIX ĐẨY START_X VỀ 5mm ĐỂ SÁT LỀ TRÁI TIẾT KIỆM GIẤY
                 if (printSize === '3x4') {
-                    boardHtml += drawHtmlGrid(data1, 59, 5, 30, 40, 1, 1);
-                    boardHtml += drawHtmlGrid(data2, 59, 132, 30, 40, 1, 1);
+                    boardHtml += drawHtmlGrid(data1, 5, 5, 30, 40, 1, 1);
+                    boardHtml += drawHtmlGrid(data2, 5, 132, 30, 40, 1, 1);
                 } else {
                     boardHtml += drawHtmlGrid(data1, 12, 5, 40, 60, 5, 5);
                     boardHtml += drawHtmlGrid(data2, 155, 5, 40, 60, 5, 5);
@@ -657,7 +657,8 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                 if (printSize === '3x4') {
                     doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
                     function draw9Photos3x4(imgData, imgType, startY) {
-                        const imgWidth = 30, imgHeight = 40, gapX = 1, gapY = 1, startX = 59; 
+                        // ĐÃ FIX ĐẨY START_X VỀ 5mm ĐỂ SÁT LỀ TRÁI 
+                        const imgWidth = 30, imgHeight = 40, gapX = 1, gapY = 1, startX = 5; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
@@ -666,14 +667,13 @@ if app_mode == "👥 Tool Ghép In A4 (2 Người)":
                             }
                         }
                     }
-                    // ĐẨY SÁT LÊN LỀ TRÊN CÁCH 5MM, NGƯỜI 2 NỐI TIẾP NGAY BÊN DƯỚI
                     if (data1) draw9Photos3x4(data1, type1, 5); 
                     if (data2) draw9Photos3x4(data2, type2, 132); 
                     return { doc: doc, fileName: 'Anh_The_3x4_A4.pdf' };
                 } else {
                     doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                     function draw9Photos4x6(imgData, imgType, startX) {
-                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 5; // Đẩy lề trên còn 5mm
+                        const imgWidth = 40, imgHeight = 60, gapX = 5, gapY = 5, startY = 5; 
                         for (let row = 0; row < 3; row++) {
                             for (let col = 0; col < 3; col++) {
                                 const x = startX + col * (imgWidth + gapX);
@@ -757,7 +757,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.6.2 - Đẩy sát lề trên tối ưu giấy in")
+    st.caption("Phiên bản V2.6.3 - Canh lề trái tiết kiệm giấy")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
