@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image, ImageEnhance
 import cv2
 import numpy as np
+from rembg import remove, new_session
 import io
 import gc
 import streamlit.components.v1 as components
@@ -47,110 +48,711 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIC HÀM ---
-# ... (Các hàm khác giữ nguyên)
+@st.cache_resource
+def get_rembg_session():
+    return new_session("u2netp")
 
-def create_pdf(photos, size_type):
+# --- 2. LOGIC HÀM ---
+def reset_beauty_params():
+    st.session_state.val_smooth = 0
+    st.session_state.val_makeup = 0
+    st.session_state.val_exposure = 1.0
+    st.session_state.val_contrast = 1.0
+    st.session_state.val_temp = 0
+    st.session_state.val_sharp_amount = 0 
+    st.session_state.val_clarity = 0
+    st.session_state.val_denoise = 0      
+    st.session_state.val_blacks = 0       
+    st.session_state.val_whites = 0       
+    st.session_state.val_dehaze = 0
+    st.session_state.val_zoom = 1.0
+    st.session_state.val_move_x = 0
+    st.session_state.val_move_y = 0
+    st.session_state.val_edge_soft = 0
+    st.session_state.auto_level = 0
+
+def apply_gender_preset():
+    if 'gender_radio' in st.session_state:
+        style = st.session_state.gender_radio
+        if style == "Nam":
+            st.session_state.val_smooth = 5
+            st.session_state.val_makeup = 2
+            st.session_state.val_exposure = 1.05
+            st.session_state.val_contrast = 1.15
+            st.session_state.val_sharp_amount = 20
+            st.session_state.val_clarity = 15
+            st.session_state.val_denoise = 5
+            st.session_state.val_blacks = 10
+            st.session_state.val_whites = 5
+            st.toast("👨 Đã áp dụng mẫu Nam")
+        else:
+            st.session_state.val_smooth = 25
+            st.session_state.val_makeup = 20
+            st.session_state.val_exposure = 1.10
+            st.session_state.val_contrast = 1.05
+            st.session_state.val_sharp_amount = 10
+            st.session_state.val_clarity = 5
+            st.session_state.val_denoise = 10
+            st.session_state.val_whites = 15
+            st.toast("👩 Đã áp dụng mẫu Nữ")
+
+def set_auto_beauty():
+    if 'auto_level' not in st.session_state:
+        st.session_state.auto_level = 0
+    current_level = st.session_state.auto_level
+    next_level = (current_level + 1) % 3
+    st.session_state.auto_level = next_level
+
+    if next_level == 1:
+        st.toast("✨ Auto Level 1: Nhẹ nhàng")
+        st.session_state.val_smooth = 5
+        st.session_state.val_makeup = 2
+        st.session_state.val_exposure = 1.05
+        st.session_state.val_whites = 6
+        st.session_state.val_blacks = 4
+        st.session_state.val_sharp_amount = 2
+        st.session_state.val_edge_soft = 2
+    elif next_level == 2:
+        st.toast("✨✨ Auto Level 2: Rực rỡ")
+        st.session_state.val_smooth = 10
+        st.session_state.val_makeup = 4
+        st.session_state.val_exposure = 1.10
+        st.session_state.val_whites = 12
+        st.session_state.val_blacks = 8
+        st.session_state.val_sharp_amount = 4
+        st.session_state.val_edge_soft = 4
+    else:
+        st.toast("🔄 Đã tắt Auto")
+        reset_beauty_params()
+        return
+
+    st.session_state.val_contrast = 1.0
+    st.session_state.val_temp = 0
+    st.session_state.val_clarity = 0
+    st.session_state.val_denoise = 0
+    st.session_state.val_dehaze = 0
+
+def resize_image_input(image, max_height=1200):
+    w, h = image.size
+    if h > max_height:
+        ratio = max_height / h
+        new_w = int(w * ratio)
+        return image.resize((new_w, max_height), Image.Resampling.LANCZOS)
+    return image
+
+def rotate_image(image, angle):
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+    return rotated
+
+def get_face_angle(gray_img, face_rect):
+    (x, y, w, h) = face_rect
+    roi_gray = gray_img[y:y+h, x:x+w]
+    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+    eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
+    if len(eyes) >= 2:
+        eyes = sorted(eyes, key=lambda e: e[0])
+        p1 = (eyes[0][0] + eyes[0][2]//2, eyes[0][1] + eyes[0][3]//2)
+        p2 = (eyes[-1][0] + eyes[-1][2]//2, eyes[-1][1] + eyes[-1][3]//2)
+        delta_x = p2[0] - p1[0]
+        delta_y = p2[1] - p1[1]
+        if delta_x < w/5: return 0.0
+        return np.degrees(np.arctan2(delta_y, delta_x))
+    return 0.0
+
+def detect_face_mediapipe(img_bgra):
+    if not HAS_MEDIAPIPE: return None, 0.0
+    img_rgb = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2RGB)
+    h, w, _ = img_rgb.shape
+    
+    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
+        results = face_detection.process(img_rgb)
+        
+        if not results.detections:
+            return None, 0.0
+            
+        detection = results.detections[0]
+        bboxC = detection.location_data.relative_bounding_box
+        
+        x = int(bboxC.xmin * w)
+        y = int(bboxC.ymin * h)
+        width = int(bboxC.width * w)
+        height = int(bboxC.height * h)
+        face_rect = (x, y, width, height)
+        
+        right_eye = detection.location_data.relative_keypoints[0]
+        left_eye = detection.location_data.relative_keypoints[1]
+        
+        p1 = (int(right_eye.x * w), int(right_eye.y * h))
+        p2 = (int(left_eye.x * w), int(left_eye.y * h))
+        
+        delta_x = p2[0] - p1[0]
+        delta_y = p2[1] - p1[1]
+        
+        if delta_x == 0: 
+            angle = 0.0
+        else:
+            angle = np.degrees(np.arctan2(delta_y, delta_x))
+            
+        return face_rect, angle
+
+def process_raw_to_nobg(file_input):
+    image = Image.open(file_input)
+    image = resize_image_input(image, max_height=1200)
+    session = get_rembg_session()
+    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
+    no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
+    return no_bg_cv
+
+def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="MediaPipe"):
+    try:
+        img_working = no_bg_img.copy()
+        
+        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
+            result = detect_face_mediapipe(img_working)
+            if result[0] is None: return None, "Không tìm thấy khuôn mặt (MediaPipe)", 0
+            face_rect, auto_angle = result
+            (x, y, w, h) = face_rect
+        else:
+            gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+            if len(faces) == 0: return None, "Không tìm thấy khuôn mặt (Haarcascade)", 0
+            face_rect = max(faces, key=lambda f: f[2] * f[3])
+            auto_angle = get_face_angle(gray, face_rect)
+            (x, y, w, h) = face_rect
+
+        if abs(auto_angle) < 1.0 or abs(auto_angle) > 20.0: auto_angle = 0.0 
+
+        total_angle = auto_angle + manual_angle
+        img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
+
+        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
+            result_new = detect_face_mediapipe(img_rotated)
+            if result_new[0] is not None:
+                (x, y, w, h) = result_new[0]
+        else:
+            gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
+            faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
+            if len(faces_new) > 0:
+                (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3])
+
+        if target_ratio == 1.0: 
+            zoom_factor = 1.8  
+            top_offset = 0.55 
+        elif 0.77 <= target_ratio <= 0.78: 
+            zoom_factor = 1.7  
+            top_offset = 0.50 
+        elif 0.68 <= target_ratio <= 0.69: 
+            zoom_factor = 1.75 
+            top_offset = 0.50  
+        elif target_ratio < 0.7: 
+            zoom_factor = 2.0  
+            top_offset = 0.45   
+        else: 
+            zoom_factor = 2.2
+            top_offset = 0.5
+
+        crop_h = int(h * zoom_factor) 
+        crop_w = int(crop_h * target_ratio)
+        
+        face_center_x = x + w // 2
+        top_y = int(y - (h * top_offset)) 
+        left_x = int(face_center_x - crop_w // 2)
+
+        img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
+        canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
+        canvas.paste(img_pil, (-left_x, -top_y), img_pil)
+        return canvas, f"Góc Auto ({detector_type}): {auto_angle:.1f}°", total_angle
+    except Exception as e:
+        return None, str(e), 0
+
+def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
+    if zoom == 1.0 and move_x == 0 and move_y == 0: return image
+    w, h = image.size
+    new_w = int(w * zoom)
+    new_h = int(h * zoom)
+    img_resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    center_x = (w - new_w) // 2
+    center_y = (h - new_h) // 2
+    paste_x = center_x + move_x
+    paste_y = center_y + move_y
+    canvas.paste(img_resized, (paste_x, paste_y), img_resized)
+    return canvas
+
+def apply_edge_softness(image_rgba, strength=0):
+    if strength == 0: return image_rgba
+    img = np.array(image_rgba)
+    alpha = img[:, :, 3]
+    k_size = int(strength) * 2 + 1 
+    alpha_blurred = cv2.GaussianBlur(alpha, (k_size, k_size), 0)
+    img[:, :, 3] = alpha_blurred
+    return Image.fromarray(img)
+
+def adjust_levels(image, blacks=0, whites=0):
+    if blacks == 0 and whites == 0: return image
+    in_black = blacks
+    in_white = 255 - whites
+    if in_black >= in_white: in_black = in_white - 1
+    lut = np.arange(256, dtype=np.float32)
+    scale = 255.0 / (in_white - in_black)
+    lut = (lut - in_black) * scale
+    lut = np.clip(lut, 0, 255).astype(np.uint8)
+    return cv2.LUT(image, lut)
+
+def apply_super_sharpen(image, amount=0):
+    if amount == 0: return image
+    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+    sharpened = cv2.filter2D(image, -1, kernel)
+    return cv2.addWeighted(image, 1.0 - (amount/40.0), sharpened, (amount/40.0), 0)
+
+def apply_clarity(image_bgr, amount=0):
+    if amount == 0: return image_bgr
+    lab = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=(amount / 10.0) + 1.0, tileGridSize=(8, 8))
+    l_new = clahe.apply(l)
+    lab_new = cv2.merge((l_new, a, b))
+    return cv2.cvtColor(lab_new, cv2.COLOR_LAB2BGR)
+
+def apply_advanced_effects(base_img, params):
+    img_transformed = apply_transform(base_img, params['zoom'], params['move_x'], params['move_y'])
+    if params['edge_soft'] > 0:
+        img_transformed = apply_edge_softness(img_transformed, params['edge_soft'])
+
+    img_bgra = cv2.cvtColor(np.array(img_transformed), cv2.COLOR_RGBA2BGRA)
+    b, g, r, a = cv2.split(img_bgra)
+    img_bgr = cv2.merge([b, g, r])
+    
+    if params['denoise'] > 0:
+        h_val = params['denoise']
+        img_bgr = cv2.fastNlMeansDenoisingColored(img_bgr, None, h_val, h_val, 7, 21)
+    if params['smooth'] > 0:
+        d = 5
+        sigma = int(params['smooth'] * 2) + 10
+        img_bgr = cv2.bilateralFilter(img_bgr, d=d, sigmaColor=sigma, sigmaSpace=sigma)
+    if params['dehaze'] > 0:
+        lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+        l_c, a_c, b_c = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=1.0 + (params['dehaze']/10.0), tileGridSize=(8,8))
+        l_c = clahe.apply(l_c)
+        img_bgr = cv2.cvtColor(cv2.merge((l_c, a_c, b_c)), cv2.COLOR_LAB2BGR)
+    if params['temp'] != 0:
+        temp = int(params['temp'])
+        b_c, g_c, r_c = cv2.split(img_bgr)
+        if temp > 0:
+            r_c = cv2.add(r_c, temp)
+            b_c = cv2.subtract(b_c, temp)
+        else:
+            r_c = cv2.add(r_c, temp)
+            b_c = cv2.subtract(b_c, temp)
+        img_bgr = cv2.merge([b_c, g_c, r_c])
+    if params['makeup'] > 0:
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+        h_c, s_c, v_c = cv2.split(hsv)
+        s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
+        v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
+        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
+    if params['blacks'] > 0 or params['whites'] > 0:
+        img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
+    if params['clarity'] > 0:
+        img_bgr = apply_clarity(img_bgr, params['clarity'])
+    if params['sharp_amount'] > 0:
+        img_bgr = apply_super_sharpen(img_bgr, params['sharp_amount'])
+
+    final_bgra = cv2.merge([img_bgr[:,:,0], img_bgr[:,:,1], img_bgr[:,:,2], a])
+    
+    img_pil = Image.fromarray(cv2.cvtColor(final_bgra, cv2.COLOR_BGRA2RGBA))
+    if params['exposure'] != 1.0:
+        img_pil = ImageEnhance.Brightness(img_pil).enhance(params['exposure'])
+    if params['contrast'] != 1.0:
+        img_pil = ImageEnhance.Contrast(img_pil).enhance(params['contrast'])
+    return img_pil
+
+def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
     
-    # Thiết lập trang dọc A4 mặc định
-    doc = FPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-    
-    # Kích thước ảnh
-    if "3x4" in size_type:
-        img_w, img_h = 30, 40
+    if "4x6" in size_type:
+        pdf = FPDF(orientation='P', unit='mm', format='A4') 
     else:
-        img_w, img_h = 40, 60
-    
-    # Số lượng ảnh cho mỗi người
-    qty_per_person = 9
-    
-    # Vị trí bắt đầu xếp ảnh
-    start_x, start_y = 10, 15
-    
-    # Khoảng cách giữa các ảnh
-    gap_x, gap_y = 3, 3
-    
-    cur_x = start_x
-    cur_y = start_y
-    
-    # Lặp qua từng người
-    for person_num in range(1, 5):
-        # Lấy ảnh của người tương ứng
-        photo = next((p for p in photos if p['person_num'] == person_num), None)
+        pdf = FPDF(orientation='P', unit='mm', format=(105, 148)) 
         
-        if photo:
-            # Lặp qua từng ảnh của người tương ứng
-            for i in range(qty_per_person):
-                # Xuống hàng nếu vượt quá chiều ngang hữu dụng
-                if cur_x + img_w > 210 - start_x:
-                    cur_x = start_x
-                    cur_y += img_h + gap_y
-                
-                # Sang trang mới nếu vượt quá chiều dọc hữu dụng
-                if cur_y + img_h > 297 - start_y:
-                    doc.add_page()
-                    cur_x = start_x
-                    cur_y = start_y
-                
-                # Vẽ ảnh vào PDF
-                doc.add_image(photo['data'], photo['type'], cur_x, cur_y, img_w, img_h)
-                
-                # Tịnh tiến vị trí cột tiếp theo
-                cur_x += img_w + gap_x
-                
-            # Xuống hàng sau mỗi nhóm 9 ảnh
-            cur_x = start_x
-            cur_y += img_h + gap_y
+    pdf.add_page()
+    temp_img_path = "temp_print.jpg"
+    img_person.save(temp_img_path, quality=100, dpi=(300, 300))
+    
+    if "5x5" in size_type:
+        w_mm, h_mm = 50, 50
+        cols, rows = 2, 2
+        margin_x, margin_y = 2, 5
+    elif "3.5x4.5" in size_type: 
+        w_mm, h_mm = 35, 45
+        cols, rows = 2, 3
+        margin_x, margin_y = 17, 6 
+    elif "3.3x4.8" in size_type: 
+        w_mm, h_mm = 33, 48
+        cols, rows = 2, 2 
+        margin_x, margin_y = 19, 20 
+    elif "4x6" in size_type:
+        w_mm, h_mm = 40, 60
+        cols, rows = 2, 4 
+        margin_x, margin_y = 62, 25 
+    else: 
+        w_mm, h_mm = 30, 40
+        cols, rows = 3, 3
+        margin_x, margin_y = 5, 10
+
+    for r in range(rows):
+        for c in range(cols):
+            gap = 4 if "4x6" in size_type else 2
+            x = margin_x + c * (w_mm + gap) 
+            y = margin_y + r * (h_mm + gap)
+            pdf.image(temp_img_path, x=x, y=y, w=w_mm, h=h_mm)
             
-    return bytes(doc.output())
+    return bytes(pdf.output())
+
+def create_print_layout_preview(img_person, size_type):
+    if "4x6" in size_type:
+        PAPER_W_PX, PAPER_H_PX = 2480, 3508 
+    else:
+        PAPER_W_PX, PAPER_H_PX = 1240, 1748 
+        
+    bg_paper = Image.new("RGB", (PAPER_W_PX, PAPER_H_PX), (255, 255, 255))
+    
+    if "5x5" in size_type: 
+        target_w, target_h = 590, 590
+        rows, cols = 2, 2
+        start_x, start_y = 30, 200
+        gap = 30
+    elif "3.5x4.5" in size_type:
+        target_w, target_h = 413, 531 
+        rows, cols = 3, 2
+        start_x, start_y = 190, 80
+        gap = 40
+    elif "3.3x4.8" in size_type: 
+        target_w, target_h = 390, 567 
+        rows, cols = 2, 2
+        start_x, start_y = 200, 250
+        gap = 40
+    elif "4x6" in size_type:
+        target_w, target_h = 472, 708
+        rows, cols = 4, 2 
+        start_x, start_y = 743, 263 
+        gap = 50
+    else: 
+        target_w, target_h = 354, 472
+        rows, cols = 3, 3
+        start_x, start_y = 80, 120
+        gap = 40
+
+    img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
+    for r in range(rows):
+        for c in range(cols):
+            x = start_x + c * (target_w + gap)
+            y = start_y + r * (target_h + gap)
+            bg_paper.paste(img_resized, (x, y))
+    return bg_paper
 
 # --- 3. GIAO DIỆN CHÍNH ---
-# ... (Phần giao diện giữ nguyên)
+
+st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
+
+if not HAS_FPDF:
+    st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
+
+# --- MENU CHUYỂN CHẾ ĐỘ HOẠT ĐỘNG TẠI THANH BÊN ---
+with st.sidebar:
+    st.header("🛠️ Menu Chức Năng")
+    app_mode = st.radio("Chọn chế độ:", ["📸 Studio Xử Lý (1 Người)", "👥 Tool Ghép In A4 (Số lượng lớn)"])
+    st.markdown("---")
 
 # ==============================================================================
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ ĐƯỢC NÂNG CẤP TOÀN DIỆN)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
-    # ... (Phần HTML giữ nguyên)
+    st.info("💡 Điểm mới: Bạn có thể chọn chính xác số tấm ảnh cần in cho mỗi người. Tool sẽ tự động xếp liên tiếp ma trận và tự động tràn sang trang mới nếu quá tải!")
     
-    # XỬ LÝ NÚT XEM TRƯỚC (BẢN ĐỒ HOẠT ĐỘNG KHÍT THEO MA TRẬN ĐỘNG)
-    document.getElementById('previewBtn').addEventListener('click', function() {
-        // ... (Phần lấy danh sách ảnh hợp lệ giữ nguyên)
-        
-        const printSize = document.getElementById('printSize').value;
-        
-        // Quy đổi thông số mm giả lập trên khung tỉ lệ A4 đứng (210 x 297)
-        const a4W = 210;
-        const a4H = 297;
-        
-        let imgW = (printSize === '3x4') ? 30 : 40;
-        let imgH = (printSize === '3x4') ? 40 : 60;
-        let gapX = 3;
-        let gapY = 3;
-        let marginX = 10;
-        let marginY = 15;
-
-        let curX = marginX;
-        let curY = marginY;
-        
-        let pagesHtml = '';
-        let currentPageContent = '';
-
-        function openPageBox() {
-            return `<div class="a4-page-preview" style="aspect-ratio: 210/297; border: 1px solid #777; background:#fff; margin-bottom:20px; position:relative;">`;
-        }
-
-        currentPageContent = openPageBox();
-
-        // Lặp qua từng người
-        for (let personNum = 1; personNum <= 4; personNum++) {
-            // Lấy ảnh của người tương ứng
-            const photo = photos.find(p => p.personNum === personNum);
+    html_code = """
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
+                display: flex; justify-content: center; align-items: center; 
+                min-height: 100vh; margin: 0; padding: 20px;
+            }
+            .container { 
+                background: #ffffff; padding: 35px; border-radius: 20px; 
+                box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 750px; width: 100%; text-align: center;
+            }
+            h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
             
-            if (photo) {
-                // Lặp qua từng ảnh của người tương ứng
-                for (let i = 0; i < 9; i++) {
+            .size-selector { 
+                background: linear-gradient(to right, #f8f9fa, #e9ecef); padding: 18px; 
+                border-radius: 12px; border-left: 5px solid #007bff; margin-bottom: 25px; text-align: left;
+            }
+            .size-selector label { font-weight: 700; color: #495057; font-size: 15px;}
+            .size-selector select { 
+                width: 100%; padding: 12px; margin-top: 8px; border-radius: 8px; 
+                border: 1px solid #ced4da; font-size: 15px; cursor: pointer; outline: none; transition: border-color 0.3s;
+            }
+            
+            .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px;}
+            .person-box { 
+                flex: 1; border: 2px dashed #b8c2cc; padding: 15px 10px; border-radius: 14px; 
+                background: #fafafa; transition: all 0.3s ease; position: relative; text-align: center;
+            }
+            .person-box:hover { border-color: #007bff; background: #f0f7ff;}
+            .person-box h4 { margin: 0 0 10px 0; color: #0056b3; font-size: 15px; font-weight: 700;}
+            
+            /* Khu vực cấu hình số lượng ảnh cần in */
+            .qty-area {
+                margin-top: 10px; background: #eee; padding: 5px; border-radius: 6px;
+                display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px;
+            }
+            .qty-area input { width: 50px; text-align: center; padding: 3px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold;}
+
+            input[type="file"] { display: none; }
+            .custom-file-upload { 
+                display: inline-block; padding: 8px 12px; cursor: pointer; background-color: #edf2f7; 
+                color: #4a5568; border-radius: 8px; font-weight: 600; font-size: 12px; 
+                border: 1px solid #e2e8f0; width: 85%; margin: 0 auto;
+            }
+            .custom-file-upload:hover { background-color: #e2e8f0; }
+            
+            .img-wrapper { position: relative; display: inline-block; margin-top: 10px; }
+            .preview { 
+                max-width: 80px; max-height: 100px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); 
+                border: 2px solid #fff; display: none; object-fit: cover;
+            }
+            .clear-btn { 
+                position: absolute; top: -8px; right: -8px; background: #ff4757; color: white; 
+                border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; 
+                font-weight: bold; cursor: pointer; display: none; align-items: center; justify-content: center;
+            }
+            
+            .btn-group { display: flex; gap: 15px; justify-content: center; margin-top: 30px;}
+            .btn { 
+                border-radius: 50px; padding: 16px 25px; font-size: 15px; font-weight: 700; 
+                text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; color: white; border: none; 
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: all 0.3s ease; flex: 1; 
+            }
+            #previewBtn { background: linear-gradient(135deg, #36D1DC 0%, #5B86E5 100%); }
+            #downloadBtn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); display: none; }
+            
+            #previewContainer { 
+                display: none; margin-top: 35px; border-top: 2px dashed #e2e8f0; padding-top: 25px; 
+            }
+            #previewContainer h4 { color: #4a5568; margin-bottom: 20px; font-weight: 700;}
+            
+            /* Thiết kế layout mô phỏng trang in */
+            .a4-page-preview {
+                position: relative; width: 100%; max-width: 480px; background: white; 
+                box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin: 0 auto 30px auto; 
+                border: 1px solid #ccc; overflow: hidden; border-radius: 4px;
+            }
+        </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <h2>HỆ THỐNG XẾP IN ĐA NĂNG SHOPTINHOC</h2>
+            
+            <div class="size-selector">
+                <label>📏 CHỌN KÍCH THƯỚC IN ẢNH THẺ:</label>
+                <select id="printSize">
+                    <option value="3x4">Kích thước chuẩn 3x4 cm (Nhiều hàng/cột xếp dọc)</option>
+                    <option value="4x6">Kích thước chuẩn 4x6 cm (Nhiều hàng/cột xếp dọc)</option>
+                </select>
+            </div>
+            
+            <div class="upload-group">
+                <div class="person-box">
+                    <h4>👤 Người thứ 1</h4>
+                    <label for="imgInput1" class="custom-file-upload" id="labelInput1">📁 Chọn Ảnh...</label>
+                    <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
+                    <center>
+                        <div class="img-wrapper">
+                            <img id="preview1" class="preview" alt="Preview 1">
+                            <button id="clearBtn1" class="clear-btn">✖</button>
+                        </div>
+                    </center>
+                    <div class="qty-area">
+                        <span>Số ảnh in:</span>
+                        <input type="number" id="qty1" value="4" min="0" max="24">
+                    </div>
+                </div>
+                <div class="person-box">
+                    <h4>👤 Người thứ 2</h4>
+                    <label for="imgInput2" class="custom-file-upload" id="labelInput2">📁 Chọn Ảnh...</label>
+                    <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
+                    <center>
+                        <div class="img-wrapper">
+                            <img id="preview2" class="preview" alt="Preview 2">
+                            <button id="clearBtn2" class="clear-btn">✖</button>
+                        </div>
+                    </center>
+                    <div class="qty-area">
+                        <span>Số ảnh in:</span>
+                        <input type="number" id="qty2" value="4" min="0" max="24">
+                    </div>
+                </div>
+            </div>
+
+            <div class="upload-group">
+                <div class="person-box">
+                    <h4>👤 Người thứ 3</h4>
+                    <label for="imgInput3" class="custom-file-upload" id="labelInput3">📁 Chọn Ảnh...</label>
+                    <input type="file" id="imgInput3" accept="image/png, image/jpeg, image/jpg">
+                    <center>
+                        <div class="img-wrapper">
+                            <img id="preview3" class="preview" alt="Preview 3">
+                            <button id="clearBtn3" class="clear-btn">✖</button>
+                        </div>
+                    </center>
+                    <div class="qty-area">
+                        <span>Số ảnh in:</span>
+                        <input type="number" id="qty3" value="0" min="0" max="24">
+                    </div>
+                </div>
+                <div class="person-box">
+                    <h4>👤 Người thứ 4</h4>
+                    <label for="imgInput4" class="custom-file-upload" id="labelInput4">📁 Chọn Ảnh...</label>
+                    <input type="file" id="imgInput4" accept="image/png, image/jpeg, image/jpg">
+                    <center>
+                        <div class="img-wrapper">
+                            <img id="preview4" class="preview" alt="Preview 4">
+                            <button id="clearBtn4" class="clear-btn">✖</button>
+                        </div>
+                    </center>
+                    <div class="qty-area">
+                        <span>Số ảnh in:</span>
+                        <input type="number" id="qty4" value="0" min="0" max="24">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="btn-group">
+                <button id="previewBtn" class="btn">👁️ Xem Trước Bản In</button>
+                <button id="downloadBtn" class="btn">⬇️ Tải File PDF</button>
+            </div>
+            
+            <div id="previewContainer">
+                <h4>📄 MÔ PHỎNG TRANG IN CHUẨN A4</h4>
+                <div id="pdfIframeContainer"></div>
+            </div>
+
+        </div>
+
+        <script>
+            let data1 = null, type1 = 'JPEG';
+            let data2 = null, type2 = 'JPEG';
+            let data3 = null, type3 = 'JPEG';
+            let data4 = null, type4 = 'JPEG';
+
+            function handleImageUpload(inputId, previewId, clearBtnId, labelId, personNum) {
+                document.getElementById(inputId).addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        let type = (file.type === 'image/png') ? 'PNG' : 'JPEG';
+                        if(personNum === 1) type1 = type;
+                        if(personNum === 2) type2 = type;
+                        if(personNum === 3) type3 = type;
+                        if(personNum === 4) type4 = type;
+
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            if(personNum === 1) data1 = event.target.result;
+                            if(personNum === 2) data2 = event.target.result;
+                            if(personNum === 3) data3 = event.target.result;
+                            if(personNum === 4) data4 = event.target.result;
+                            
+                            const imgElement = document.getElementById(previewId);
+                            imgElement.src = event.target.result;
+                            imgElement.style.display = 'block';
+                            
+                            document.getElementById(clearBtnId).style.display = 'flex';
+                            document.getElementById(labelId).innerHTML = '🔄 Đổi Ảnh';
+                        }
+                        reader.readAsDataURL(file);
+                    }
+                });
+
+                document.getElementById(clearBtnId).addEventListener('click', function() {
+                    document.getElementById(inputId).value = "";
+                    document.getElementById(previewId).style.display = 'none';
+                    document.getElementById(previewId).src = "";
+                    this.style.display = 'none';
+                    document.getElementById(labelId).innerHTML = '📁 Chọn Ảnh...';
+                    
+                    if(personNum === 1) data1 = null;
+                    if(personNum === 2) data2 = null;
+                    if(personNum === 3) data3 = null;
+                    if(personNum === 4) data4 = null;
+                    
+                    document.getElementById('previewContainer').style.display = 'none';
+                    document.getElementById('downloadBtn').style.display = 'none';
+                });
+            }
+
+            handleImageUpload('imgInput1', 'preview1', 'clearBtn1', 'labelInput1', 1);
+            handleImageUpload('imgInput2', 'preview2', 'clearBtn2', 'labelInput2', 2);
+            handleImageUpload('imgInput3', 'preview3', 'clearBtn3', 'labelInput3', 3);
+            handleImageUpload('imgInput4', 'preview4', 'clearBtn4', 'labelInput4', 4);
+
+            // Thuật toán lấy danh sách ảnh hợp lệ để đưa vào vòng xếp
+            function getActivePhotosList() {
+                let list = [];
+                let q1 = parseInt(document.getElementById('qty1').value) || 0;
+                let q2 = parseInt(document.getElementById('qty2').value) || 0;
+                let q3 = parseInt(document.getElementById('qty3').value) || 0;
+                let q4 = parseInt(document.getElementById('qty4').value) || 0;
+
+                if (data1 && q1 > 0) { for(let i=0; i<q1; i++) list.push({data: data1, type: type1}); }
+                if (data2 && q2 > 0) { for(let i=0; i<q2; i++) list.push({data: data2, type: type2}); }
+                if (data3 && q3 > 0) { for(let i=0; i<q3; i++) list.push({data: data3, type: type3}); }
+                if (data4 && q4 > 0) { for(let i=0; i<q4; i++) list.push({data: data4, type: type4}); }
+                return list;
+            }
+
+            // XỬ LÝ NÚT XEM TRƯỚC (BẢN ĐỒ HOẠT ĐỘNG KHÍT THEO MA TRẬN ĐỘNG)
+            document.getElementById('previewBtn').addEventListener('click', function() {
+                let photos = getActivePhotosList();
+                if (photos.length === 0) { return alert("Vui lòng tải ảnh lên và nhập số lượng in lớn hơn 0!"); }
+
+                const printSize = document.getElementById('printSize').value;
+                
+                // Quy đổi thông số mm giả lập trên khung tỉ lệ A4 đứng (210 x 297)
+                const a4W = 210;
+                const a4H = 297;
+                
+                let imgW = (printSize === '3x4') ? 30 : 40;
+                let imgH = (printSize === '3x4') ? 40 : 60;
+                let gapX = 3;
+                let gapY = 3;
+                let marginX = 10;
+                let marginY = 15;
+
+                let curX = marginX;
+                let curY = marginY;
+                
+                let pagesHtml = '';
+                let currentPageContent = '';
+
+                function openPageBox() {
+                    return `<div class="a4-page-preview" style="aspect-ratio: 210/297; border: 1px solid #777; background:#fff; margin-bottom:20px; position:relative;">`;
+                }
+
+                currentPageContent = openPageBox();
+
+                photos.forEach((photo, index) => {
                     // Kiểm tra xem ảnh tiếp theo có bị tràn chiều ngang không, nếu có thì xuống hàng
                     if (curX + imgW > a4W - marginX) {
                         curX = marginX;
@@ -177,32 +779,247 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     
                     // Tịnh tiến sang phải cho tấm ảnh tiếp theo
                     curX += imgW + gapX;
-                }
+                });
+
+                currentPageContent += `</div>`; // Đóng trang cuối cùng
+                pagesHtml += currentPageContent;
+
+                document.getElementById('pdfIframeContainer').innerHTML = pagesHtml;
+                document.getElementById('previewContainer').style.display = 'block';
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+            });
+
+            // XỬ LÝ IN PDF VỚI ĐƯỜNG CẮT (CUT LINES) CHUYÊN NGHIỆP
+            document.getElementById('downloadBtn').addEventListener('click', function() {
+                let photos = getActivePhotosList();
+                if (photos.length === 0) return alert("Không có dữ liệu để xuất file!");
+
+                const { jsPDF } = window.jspdf;
+                // Thiết lập trang dọc A4 mặc định
+                let doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
                 
-                // Xuống hàng sau mỗi nhóm 9 ảnh
-                curX = marginX;
-                curY += imgH + gapY;
-            }
-        }
+                const printSize = document.getElementById('printSize').value;
+                let imgW = (printSize === '3x4') ? 30 : 40;
+                let imgH = (printSize === '3x4') ? 40 : 60;
+                
+                let gapX = 3;
+                let gapY = 3;
+                let startX = 10;
+                let startY = 15;
+                
+                let curX = startX;
+                let curY = startY;
 
-        currentPageContent += `</div>`; // Đóng trang cuối cùng
-        pagesHtml += currentPageContent;
+                photos.forEach((photo, index) => {
+                    // Xuống dòng nếu vượt quá chiều ngang hữu dụng
+                    if (curX + imgW > 210 - startX) {
+                        curX = startX;
+                        curY += imgH + gapY;
+                    }
+                    
+                    // Sang trang mới nếu vượt quá chiều dọc hữu dụng
+                    if (curY + imgH > 297 - startY) {
+                        doc.addPage();
+                        curX = startX;
+                        curY = startY;
+                    }
 
-        document.getElementById('pdfIframeContainer').innerHTML = pagesHtml;
-        document.getElementById('previewContainer').style.display = 'block';
-        document.getElementById('downloadBtn').style.display = 'inline-block';
-    });
+                    // 1. Vẽ bức ảnh thẻ
+                    doc.addImage(photo.data, photo.type, curX, curY, imgW, imgH);
+                    
+                    // 2. Vẽ đường viền bao mảnh (Cut-line) để thợ dễ cắt ảnh nền trắng
+                    doc.setDrawColor(220, 220, 220); // Màu xám nhạt
+                    doc.setLineWidth(0.1);           // Nét siêu mảnh
+                    doc.rect(curX, curY, imgW, imgH, 'S');
 
-    // XỬ LÝ IN PDF VỚI ĐƯỜNG CẮT (CUT LINES) CHUYÊN NGHIỆP
-    document.getElementById('downloadBtn').addEventListener('click', function() {
-        // ... (Phần lấy danh sách ảnh hợp lệ giữ nguyên)
+                    // Tịnh tiến vị trí cột tiếp theo
+                    curX += imgW + gapX;
+                });
+
+                doc.save('Ghep_Anh_The_A4_SHOPTINHOC.pdf');
+            });
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=1700, scrolling=True)
+    st.stop()
+
+
+# ==============================================================================
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ STUDIO XỬ LÝ (GIỮ NGUYÊN HOÀN HẢO LOGIC CŨ)
+# ==============================================================================
+
+with st.sidebar:
+    st.header("⚙️ Thiết lập Đầu vào")
+    st.info("Bước 1: Chọn ảnh và loại ảnh")
+    
+    input_method = st.radio("Nguồn ảnh:", ["📁 Tải ảnh lên", "📷 Chụp ảnh"], horizontal=True)
+    input_file = None
+    if input_method == "📁 Tải ảnh lên":
+        input_file = st.file_uploader("Chọn file (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
+    else:
+        input_file = st.camera_input("Chụp ảnh ngay")
+
+    st.markdown("---")
+    st.subheader("🤖 Công nghệ AI Nhận diện")
+    if HAS_MEDIAPIPE:
+        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
+        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+    else:
+        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
+        detector_type = "Haarcascade"
+
+    st.markdown("---")
+    st.subheader("Kích thước & Phông nền")
+    
+    size_option = st.radio("Chọn cỡ ảnh:", 
+                         ["4x6 cm (Hộ chiếu)", 
+                          "3.5x4.5 cm (Visa Đài Loan/Úc/Hàn/Âu)",
+                          "5x5 cm (Visa Mỹ)",
+                          "3.3x4.8 cm (Visa Trung Quốc)", 
+                          "3x4 cm (Giấy tờ)"])
+    
+    if "Visa Mỹ" in size_option: target_ratio = 1.0 
+    elif "3.5x4.5" in size_option: target_ratio = 3.5/4.5
+    elif "Visa Trung Quốc" in size_option: target_ratio = 3.3/4.8
+    elif "3x4" in size_option: target_ratio = 3/4
+    else: target_ratio = 4/6
+    
+    bg_name = st.radio("Màu nền:", ["Trắng", "Xanh Chuẩn", "Xanh Nhạt", "Xanh GPLX"])
+    bg_map = {
+        "Trắng": (255, 255, 255, 255), 
+        "Xanh Chuẩn": (66, 135, 245, 255), 
+        "Xanh Nhạt": (135, 206, 250, 255),
+        "Xanh GPLX": (37, 133, 197, 255)
+    }
+    bg_val = bg_map.get(bg_name)
+    
+    st.markdown("---")
+    st.caption("Phiên bản V2.7.0 - Nâng cấp Xếp Lượng Lớn Động")
+
+# --- XỬ LÝ ẢNH ĐẦU VÀO ---
+if input_file:
+    current_file_key = f"{input_file.name}_{input_file.size}"
+    if 'current_file_key' in st.session_state and st.session_state.current_file_key != current_file_key:
+        if 'raw_nobg' in st.session_state: del st.session_state.raw_nobg
+        if 'base' in st.session_state: del st.session_state.base
+        gc.collect()
+
+    if 'current_file_key' not in st.session_state or st.session_state.current_file_key != current_file_key:
+        with st.spinner('⏳ Đang tách nền AI...'):
+            try:
+                st.session_state.raw_nobg = process_raw_to_nobg(input_file)
+                st.session_state.current_file_key = current_file_key
+            except Exception as e: st.error(f"Lỗi tải ảnh: {e}")
+
+col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
+with col_btn1:
+    current_lvl = st.session_state.get('auto_level', 0)
+    label_auto = f"✨ AUTO ĐẸP (Level {current_lvl})" if current_lvl > 0 else "✨ AUTO ĐẸP NGAY"
+    st.button(label_auto, on_click=set_auto_beauty, type="primary", use_container_width=True)
+
+with col_btn2:
+    st.button("🔄 Làm lại", on_click=reset_beauty_params, use_container_width=True)
+
+st.divider()
+
+col_tools, col_result = st.columns([1, 1.2])
+
+with col_tools:
+    st.subheader("🎛️ Bảng điều khiển")
+    
+    manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
+    if 'raw_nobg' in st.session_state:
+        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio, detector_type)
+        if final_crop: st.session_state.base = final_crop
+        else: st.error(f"Lỗi: {debug_info}")
+
+    tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
+    
+    with tab1:
+        st.caption("Chỉnh độ sáng và màu sắc")
+        p_exposure = st.slider("Độ sáng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
+        p_contrast = st.slider("Tương phản", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
+        p_temp = st.slider("Nhiệt độ màu", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
+        col_b, col_w = st.columns(2)
+        with col_b: p_blacks = st.slider("Màu Đen", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
+        with col_w: p_whites = st.slider("Màu Trắng", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
+
+    with tab2:
+        st.caption("Làm đẹp da")
+        p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
+        p_makeup = st.slider("Trang điểm", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
+        st.markdown("---")
         
-        const printSize = document.getElementById('printSize').value;
+        ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
+        if ai_enabled:
+            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], 
+                                  horizontal=True, 
+                                  key="gender_radio", 
+                                  on_change=apply_gender_preset)
+
+    with tab3:
+        st.caption("Căn chỉnh vị trí và độ nét")
+        p_zoom = st.slider("Phóng to/Thu nhỏ", 0.5, 1.5, st.session_state.get('val_zoom', 1.0), 0.05, key="val_zoom")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1: p_move_x = st.number_input("Dịch Ngang", -100, 100, st.session_state.get('val_move_x', 0), key="val_move_x")
+        with col_m2: p_move_y = st.number_input("Dịch Dọc", -100, 100, st.session_state.get('val_move_y', 0), key="val_move_y")
         
-        // ... (Phần thiết lập PDF giữ nguyên)
+        st.markdown("---")
+        p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
+        p_clarity = st.slider("Chi tiết", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
+        p_denoise = st.slider("Giảm nhiễu", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
+        p_dehaze = st.slider("Khử sương mù", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
+        p_edge_soft = st.slider("Làm mềm biên", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
+
+    params = {
+        'smooth': p_smooth, 'makeup': p_makeup,
+        'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
+        'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
+        'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
+        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
+        'edge_soft': p_edge_soft
+    }
+
+# --- D. HIỂN THỊ KẾT QUẢ ---
+with col_result:
+    if 'base' in st.session_state and st.session_state.base:
+        with st.spinner("🚀 Đang xử lý ảnh..."):
+            final_person = apply_advanced_effects(st.session_state.base, params)
         
-        // ... (Phần lặp qua từng người giữ nguyên)
+        w, h = final_person.size
+        final_img = Image.new("RGBA", (w, h), bg_val)
+        final_img.paste(final_person, (0, 0), final_person)
+        final_rgb = final_img.convert("RGB")
+
+        st.markdown('<div class="image-container">', unsafe_allow_html=True)
+        st.image(final_rgb, caption=f"KẾT QUẢ: {size_option}", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("### 📥 Tải về & In ấn")
+        d_tab1, d_tab2 = st.tabs(["Lưu Ảnh (JPG)", "In Ấn (PDF)"])
         
-        doc.save('Ghep_Anh_The_A4_SHOPTINHOC.pdf');
-    });
-}
+        with d_tab1:
+            buf = io.BytesIO()
+            final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
+            safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light", "Xanh GPLX": "blue_gplx"}.get(bg_name, "custom")
+            st.download_button(label="⬇️ Tải Ảnh JPG Chất Lượng Cao", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+
+        with d_tab2:
+            st.image(create_print_layout_preview(final_rgb, size_option), caption=f"Xem trước bản in ({'Khổ A4' if '4x6' in size_option else 'Khổ A6'})", use_container_width=True)
+            if HAS_FPDF:
+                pdf_data = create_pdf(final_rgb, size_option)
+                if pdf_data:
+                    st.download_button(label="📄 Tải File PDF để in", data=pdf_data, file_name="file_in_anh_the.pdf", mime="application/pdf", use_container_width=True)
+            else:
+                st.error("Thiếu thư viện fpdf.")
+        
+        with st.expander("👁️ So sánh Trước / Sau"):
+            c_before, c_after = st.columns(2)
+            with c_before: st.image(st.session_state.base, caption="Gốc")
+            with c_after: st.image(final_rgb, caption="Sau chỉnh sửa")
+
+    else:
+        st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
+        st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
