@@ -1,14 +1,3 @@
-Dưới đây là mã nguồn toàn bộ của file `web_the.py` đã được nâng cấp toàn diện theo các đánh giá ở trên.
-
-### Các điểm cải tiến lớn trong bản code mới này:
-
-1. **Chọn số lượng ảnh in cho từng người:** Ở giao diện in số lượng lớn, bạn có thể chọn chính xác số tấm muốn in cho từng người (từ 0 đến 9 tấm).
-2. **Thuật toán xếp ma trận tự động:** Tự động tính toán vị trí, tự động xuống dòng và tự động tràn sang trang mới (Page 2, Page 3...) nếu tổng số ảnh vượt quá một trang A4, không còn bị fix cứng 9 tấm như trước.
-3. **Thêm đường viền cắt (Cut Lines):** Bổ sung một đường viền mảnh màu xám xung quanh mỗi bức ảnh trên file PDF giúp bạn dễ dàng nhìn thấy biên để cắt khi in trên giấy ảnh nền trắng.
-
-Bạn chỉ cần sao chép toàn bộ đoạn code dưới đây và đè thẳng vào file `web_the (29).py` cũ của mình:
-
-```python
 import streamlit as st
 from PIL import Image, ImageEnhance
 import cv2
@@ -1034,5 +1023,3 @@ with col_result:
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
-
-```
