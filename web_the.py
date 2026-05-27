@@ -1,6 +1,3 @@
-Chắc chắn rồi! Dưới đây là đoạn code đã được cập nhật để xếp 9 ảnh cho mỗi người và tự động xuống hàng sau mỗi nhóm 9 ảnh:
-
-```python
 import streamlit as st
 from PIL import Image, ImageEnhance
 import cv2
@@ -209,7 +206,3 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
         doc.save('Ghep_Anh_The_A4_SHOPTINHOC.pdf');
     });
 }
-
-```
-
-Hãy nhớ sao chép toàn bộ đoạn code này và đè thẳng vào file cũ của bạn nhé! Nếu bạn có bất kỳ câu hỏi nào khác, hãy thoải mái hỏi mình!
