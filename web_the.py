@@ -470,10 +470,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ ĐƯỢC NÂNG CẤP TOÀN DIỆN)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ ĐƯỢC NÂNG CẤP MIX SIZE)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
-    st.info("💡 Điểm mới: Bạn có thể chọn chính xác số tấm ảnh cần in cho mỗi người. Tool sẽ tự động xếp liên tiếp ma trận và tự động tràn sang trang mới nếu quá tải!")
+    st.info("💡 Điểm mới: Hỗ trợ IN MIX SIZE. Bạn có thể chọn đồng thời số lượng in 3x4 và 4x6 cho từng khách hàng. Hệ thống tự động tách dòng chuẩn xác!")
     
     html_code = """
     <!DOCTYPE html>
@@ -490,19 +490,9 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             }
             .container { 
                 background: #ffffff; padding: 35px; border-radius: 20px; 
-                box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 750px; width: 100%; text-align: center;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 800px; width: 100%; text-align: center;
             }
             h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
-            
-            .size-selector { 
-                background: linear-gradient(to right, #f8f9fa, #e9ecef); padding: 18px; 
-                border-radius: 12px; border-left: 5px solid #007bff; margin-bottom: 25px; text-align: left;
-            }
-            .size-selector label { font-weight: 700; color: #495057; font-size: 15px;}
-            .size-selector select { 
-                width: 100%; padding: 12px; margin-top: 8px; border-radius: 8px; 
-                border: 1px solid #ced4da; font-size: 15px; cursor: pointer; outline: none; transition: border-color 0.3s;
-            }
             
             .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px;}
             .person-box { 
@@ -513,10 +503,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             .person-box h4 { margin: 0 0 10px 0; color: #0056b3; font-size: 15px; font-weight: 700;}
             
             .qty-area {
-                margin-top: 10px; background: #eee; padding: 5px; border-radius: 6px;
-                display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px;
+                margin-top: 15px; background: #eee; padding: 10px; border-radius: 8px;
+                display: flex; flex-direction: column; gap: 8px;
             }
-            .qty-area input { width: 50px; text-align: center; padding: 3px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold;}
+            .qty-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold; color: #444;}
+            .qty-row input { width: 55px; text-align: center; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold;}
+            .badge { color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px;}
+            .bg-3x4 { background: #007bff; }
+            .bg-4x6 { background: #28a745; }
 
             input[type="file"] { display: none; }
             .custom-file-upload { 
@@ -561,15 +555,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     </head>
     <body>
         <div class="container">
-            <h2>HỆ THỐNG XẾP IN ĐA NĂNG SHOPTINHOC</h2>
-            
-            <div class="size-selector">
-                <label>📏 CHỌN KÍCH THƯỚC IN ẢNH THẺ:</label>
-                <select id="printSize">
-                    <option value="3x4">Kích thước chuẩn 3x4 cm (Nhiều hàng/cột xếp dọc)</option>
-                    <option value="4x6">Kích thước chuẩn 4x6 cm (Nhiều hàng/cột xếp dọc)</option>
-                </select>
-            </div>
+            <h2>HỆ THỐNG XẾP IN MIX-SIZE SHOPTINHOC</h2>
             
             <div class="upload-group">
                 <div class="person-box">
@@ -583,8 +569,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         </div>
                     </center>
                     <div class="qty-area">
-                        <span>Số ảnh in:</span>
-                        <input type="number" id="qty1" value="9" min="0" max="24">
+                        <div class="qty-row">
+                            <span><span class="badge bg-3x4">3x4</span> SL:</span>
+                            <input type="number" id="qty3x4_1" value="0" min="0" max="24">
+                        </div>
+                        <div class="qty-row">
+                            <span><span class="badge bg-4x6">4x6</span> SL:</span>
+                            <input type="number" id="qty4x6_1" value="0" min="0" max="24">
+                        </div>
                     </div>
                 </div>
                 <div class="person-box">
@@ -598,8 +590,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         </div>
                     </center>
                     <div class="qty-area">
-                        <span>Số ảnh in:</span>
-                        <input type="number" id="qty2" value="9" min="0" max="24">
+                        <div class="qty-row">
+                            <span><span class="badge bg-3x4">3x4</span> SL:</span>
+                            <input type="number" id="qty3x4_2" value="0" min="0" max="24">
+                        </div>
+                        <div class="qty-row">
+                            <span><span class="badge bg-4x6">4x6</span> SL:</span>
+                            <input type="number" id="qty4x6_2" value="0" min="0" max="24">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -616,8 +614,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         </div>
                     </center>
                     <div class="qty-area">
-                        <span>Số ảnh in:</span>
-                        <input type="number" id="qty3" value="0" min="0" max="24">
+                        <div class="qty-row">
+                            <span><span class="badge bg-3x4">3x4</span> SL:</span>
+                            <input type="number" id="qty3x4_3" value="0" min="0" max="24">
+                        </div>
+                        <div class="qty-row">
+                            <span><span class="badge bg-4x6">4x6</span> SL:</span>
+                            <input type="number" id="qty4x6_3" value="0" min="0" max="24">
+                        </div>
                     </div>
                 </div>
                 <div class="person-box">
@@ -631,8 +635,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         </div>
                     </center>
                     <div class="qty-area">
-                        <span>Số ảnh in:</span>
-                        <input type="number" id="qty4" value="0" min="0" max="24">
+                        <div class="qty-row">
+                            <span><span class="badge bg-3x4">3x4</span> SL:</span>
+                            <input type="number" id="qty3x4_4" value="0" min="0" max="24">
+                        </div>
+                        <div class="qty-row">
+                            <span><span class="badge bg-4x6">4x6</span> SL:</span>
+                            <input type="number" id="qty4x6_4" value="0" min="0" max="24">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -705,32 +715,36 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             handleImageUpload('imgInput3', 'preview3', 'clearBtn3', 'labelInput3', 3);
             handleImageUpload('imgInput4', 'preview4', 'clearBtn4', 'labelInput4', 4);
 
-            // Hàm gom cấu trúc dữ liệu theo từng người riêng biệt thay vì trộn lẫn
+            // Hàm thu thập dữ liệu số lượng kép cho từng người
             function getPersonsData() {
                 let list = [];
-                let q1 = parseInt(document.getElementById('qty1').value) || 0;
-                let q2 = parseInt(document.getElementById('qty2').value) || 0;
-                let q3 = parseInt(document.getElementById('qty3').value) || 0;
-                let q4 = parseInt(document.getElementById('qty4').value) || 0;
-
-                if (data1 && q1 > 0) list.push({ data: data1, type: type1, qty: q1, label: "Người 1" });
-                if (data2 && q2 > 0) list.push({ data: data2, type: type2, qty: q2, label: "Người 2" });
-                if (data3 && q3 > 0) list.push({ data: data3, type: type3, qty: q3, label: "Người 3" });
-                if (data4 && q4 > 0) list.push({ data: data4, type: type4, qty: q4, label: "Người 4" });
+                let dArr = [null, data1, data2, data3, data4];
+                let tArr = [null, type1, type2, type3, type4];
+                
+                for(let i=1; i<=4; i++) {
+                    let q3x4 = parseInt(document.getElementById(`qty3x4_${i}`).value) || 0;
+                    let q4x6 = parseInt(document.getElementById(`qty4x6_${i}`).value) || 0;
+                    
+                    if (dArr[i] && (q3x4 > 0 || q4x6 > 0)) {
+                        list.push({ 
+                            data: dArr[i], 
+                            type: tArr[i], 
+                            qty3x4: q3x4, 
+                            qty4x6: q4x6, 
+                            label: `Người ${i}` 
+                        });
+                    }
+                }
                 return list;
             }
 
-            // XỬ LÝ NÚT XEM TRƯỚC (PHÂN CHIA TỪNG NGƯỜI XUỐNG DÒNG RÕ RÀNG)
+            // XỬ LÝ XEM TRƯỚC (HỖ TRỢ MIX SIZE)
             document.getElementById('previewBtn').addEventListener('click', function() {
                 let persons = getPersonsData();
                 if (persons.length === 0) { return alert("Vui lòng tải ảnh lên và nhập số lượng in lớn hơn 0!"); }
 
-                const printSize = document.getElementById('printSize').value;
                 const a4W = 210;
                 const a4H = 297;
-                
-                let imgW = (printSize === '3x4') ? 30 : 40;
-                let imgH = (printSize === '3x4') ? 40 : 60;
                 let gapX = 3;
                 let gapY = 3;
                 let marginX = 10;
@@ -738,6 +752,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
                 let curX = marginX;
                 let curY = marginY;
+                let lastRowHeight = 0;
                 
                 let pagesHtml = '';
                 let currentPageContent = '';
@@ -748,53 +763,58 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
                 currentPageContent = openPageBox();
 
-                // Lặp qua từng người riêng biệt
                 persons.forEach((person) => {
-                    // CỨ ĐẾN NGƯỜI MỚI: Nếu con trỏ hiện tại không nằm đầu dòng, ép buộc xuống dòng ngay lập tức
+                    
+                    // Hàm in theo lô (Dành riêng cho 1 kích cỡ)
+                    function renderBatch(qty, imgW, imgH) {
+                        if (qty === 0) return;
+                        
+                        // Nếu đang lửng lơ ở giữa dòng, ngắt xuống hàng mới ngay lập tức để không lộn xộn kích cỡ
+                        if (curX !== marginX) {
+                            curX = marginX;
+                            curY += lastRowHeight + gapY;
+                        }
+                        
+                        lastRowHeight = imgH; // Cập nhật chiều cao của hàng hiện tại
+                        
+                        for (let i = 0; i < qty; i++) {
+                            // Tràn bề ngang -> Xuống dòng
+                            if (curX + imgW > a4W - marginX) {
+                                curX = marginX;
+                                curY += lastRowHeight + gapY;
+                            }
+                            
+                            // Tràn chiều dọc -> Ngắt trang PDF mới
+                            if (curY + imgH > a4H - marginY) {
+                                currentPageContent += `</div>`;
+                                pagesHtml += currentPageContent;
+                                currentPageContent = openPageBox();
+                                curX = marginX;
+                                curY = marginY;
+                            }
+
+                            let pLeft = (curX / a4W) * 100 + '%';
+                            let pTop = (curY / a4H) * 100 + '%';
+                            let pWidth = (imgW / a4W) * 100 + '%';
+                            let pHeight = (imgH / a4H) * 100 + '%';
+
+                            currentPageContent += `<img src="${person.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E0E0E0; box-sizing: border-box;">`;
+                            
+                            curX += imgW + gapX;
+                        }
+                    }
+
+                    // Ưu tiên in toàn bộ ảnh 3x4 trước
+                    renderBatch(person.qty3x4, 30, 40);
+                    
+                    // Sau đó bẻ dòng in tiếp toàn bộ ảnh 4x6 của người đó
+                    renderBatch(person.qty4x6, 40, 60);
+
+                    // Kết thúc người này, ép ngắt dòng cho người kế tiếp
                     if (curX !== marginX) {
                         curX = marginX;
-                        curY += imgH + gapY;
+                        curY += lastRowHeight + gapY;
                     }
-
-                    // Kiểm tra xem hàng mới chuẩn bị nhảy vào có bị tràn lề dưới không, nếu có thì ngắt trang
-                    if (curY + imgH > a4H - marginY) {
-                        currentPageContent += `</div>`;
-                        pagesHtml += currentPageContent;
-                        currentPageContent = openPageBox();
-                        curX = marginX;
-                        curY = marginY;
-                    }
-
-                    // Vòng lặp in số lượng ảnh được chỉ định của người đó
-                    for (let i = 0; i < person.qty; i++) {
-                        // Kiểm tra tràn lề ngang để tự xuống dòng bên trong cụm ảnh của cùng 1 người
-                        if (curX + imgW > a4W - marginX) {
-                            curX = marginX;
-                            curY += imgH + gapY;
-                        }
-                        
-                        // Kiểm tra tràn trang đứng
-                        if (curY + imgH > a4H - marginY) {
-                            currentPageContent += `</div>`;
-                            pagesHtml += currentPageContent;
-                            currentPageContent = openPageBox();
-                            curX = marginX;
-                            curY = marginY;
-                        }
-
-                        let pLeft = (curX / a4W) * 100 + '%';
-                        let pTop = (curY / a4H) * 100 + '%';
-                        let pWidth = (imgW / a4W) * 100 + '%';
-                        let pHeight = (imgH / a4H) * 100 + '%';
-
-                        currentPageContent += `<img src="${person.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E0E0E0; box-sizing: border-box;">`;
-                        
-                        curX += imgW + gapX;
-                    }
-                    
-                    // SAU KHI HẾT ẢNH CỦA 1 NGƯỜI: Ép buộc ngắt dòng hoàn toàn để tạo khoảng cách với người kế tiếp
-                    curX = marginX;
-                    curY += imgH + gapY;
                 });
 
                 currentPageContent += `</div>`;
@@ -805,17 +825,13 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 document.getElementById('downloadBtn').style.display = 'inline-block';
             });
 
-            // XỬ LÝ XUẤT FILE PDF (TÁCH BIỆT HÀNG LỐI CHUẨN XÁC)
+            // XỬ LÝ XUẤT FILE PDF (HỖ TRỢ MIX SIZE BẰNG JSDOC)
             document.getElementById('downloadBtn').addEventListener('click', function() {
                 let persons = getPersonsData();
                 if (persons.length === 0) return alert("Không có dữ liệu để xuất file!");
 
                 const { jsPDF } = window.jspdf;
                 let doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                
-                const printSize = document.getElementById('printSize').value;
-                let imgW = (printSize === '3x4') ? 30 : 40;
-                let imgH = (printSize === '3x4') ? 40 : 60;
                 
                 let gapX = 3;
                 let gapY = 3;
@@ -824,57 +840,63 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 
                 let curX = startX;
                 let curY = startY;
+                let lastRowH = 0;
 
                 persons.forEach((person) => {
-                    // CỨ ĐẾN NGƯỜI MỚI: Chủ động đưa toạ độ X về đầu hàng và tăng Y xuống hàng tiếp theo
+                    
+                    function renderBatchPDF(qty, imgW, imgH) {
+                        if (qty === 0) return;
+                        
+                        if (curX !== startX) {
+                            curX = startX;
+                            curY += lastRowH + gapY;
+                        }
+                        
+                        lastRowH = imgH;
+
+                        for (let i = 0; i < qty; i++) {
+                            if (curX + imgW > 210 - startX) {
+                                curX = startX;
+                                curY += lastRowH + gapY;
+                            }
+                            
+                            if (curY + imgH > 297 - startY) {
+                                doc.addPage();
+                                curX = startX;
+                                curY = startY;
+                            }
+
+                            // Vẽ ảnh
+                            doc.addImage(person.data, person.type, curX, curY, imgW, imgH);
+                            
+                            // Vẽ viền cắt mảnh 
+                            doc.setDrawColor(220, 220, 220);
+                            doc.setLineWidth(0.1);
+                            doc.rect(curX, curY, imgW, imgH, 'S');
+
+                            curX += imgW + gapX;
+                        }
+                    }
+
+                    // In 3x4
+                    renderBatchPDF(person.qty3x4, 30, 40);
+                    // Bẻ dòng in 4x6
+                    renderBatchPDF(person.qty4x6, 40, 60);
+
+                    // Xong người này -> Bẻ dòng
                     if (curX !== startX) {
                         curX = startX;
-                        curY += imgH + gapY;
+                        curY += lastRowH + gapY;
                     }
-
-                    if (curY + imgH > 297 - startY) {
-                        doc.addPage();
-                        curX = startX;
-                        curY = startY;
-                    }
-
-                    for (let i = 0; i < person.qty; i++) {
-                        // Tự động xuống dòng khi đầy hàng ngang
-                        if (curX + imgW > 210 - startX) {
-                            curX = startX;
-                            curY += imgH + gapY;
-                        }
-                        
-                        // Tự động ngắt sang trang mới
-                        if (curY + imgH > 297 - startY) {
-                            doc.addPage();
-                            curX = startX;
-                            curY = startY;
-                        }
-
-                        // Vẽ ảnh thẻ vào file
-                        doc.addImage(person.data, person.type, curX, curY, imgW, imgH);
-                        
-                        // Vẽ viền cắt mảnh (Cut lines)
-                        doc.setDrawColor(220, 220, 220);
-                        doc.setLineWidth(0.1);
-                        doc.rect(curX, curY, imgW, imgH, 'S');
-
-                        curX += imgW + gapX;
-                    }
-                    
-                    // Kết thúc cụm ảnh của người này -> Ép nhảy xuống hàng mới
-                    curX = startX;
-                    curY += imgH + gapY;
                 });
 
-                doc.save('Ghep_Anh_The_A4_SHOPTINHOC.pdf');
+                doc.save('Ghep_Anh_The_MixSize.pdf');
             });
         </script>
     </body>
     </html>
     """
-    components.html(html_code, height=1700, scrolling=True)
+    components.html(html_code, height=1900, scrolling=True)
     st.stop()
 
 
@@ -928,7 +950,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V2.7.0 - Nâng cấp Xếp Lượng Lớn Động")
+    st.caption("Phiên bản V2.8.0 - Hỗ Trợ Xếp Mix Size")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
