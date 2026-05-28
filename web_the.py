@@ -202,7 +202,7 @@ def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
-    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
+    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
@@ -470,7 +470,7 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (BẢN FIX CHROME - DIRECT PRINT)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (BẢN CHUẨN ĐÃ FIX LỖI CÚ PHÁP)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     st.info("💡 Điểm mới: Đã sửa lỗi nút In trực tiếp trên trình duyệt Google Chrome bằng phương pháp Blob-Window mở rộng.")
@@ -906,11 +906,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             // FIX PHẦN IN TRỰC TIẾP CHO GOOGLE CHROME:
             document.getElementById('directPrintBtn').addEventListener('click', function() {
                 let doc = generateJsPDFObject();
-                
-                // Chuyển đối tượng PDF thành định dạng Blob có đường dẫn cục bộ
                 const blobUrl = doc.output('bloburl');
-                
-                // Mở một cửa sổ mới độc lập chạy trực tiếp luồng in của Chrome (Bỏ qua cấu trúc Iframe bị chặn)
                 const printWindow = window.open(blobUrl, '_blank');
                 
                 if (printWindow) {
@@ -980,7 +976,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V3.1.0 - Sửa lỗi tương thích Chrome Print")
+    st.caption("Phiên bản V3.1.1 - Sửa hoàn toàn lỗi cú pháp alpha_matting")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
