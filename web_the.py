@@ -473,7 +473,7 @@ with st.sidebar:
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (THU HẸP KHOẢNG CÁCH & BỎ CROP MARKS)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
-    st.info("💡 Điểm mới: Khoảng cách giữa các ảnh đã được chỉnh hẹp lại sát nhau. Loại bỏ tính năng Chừa lề cắt xén (Crop Marks) theo yêu cầu!")
+    st.info("IN ẢNH PRO")
     
     html_code = """
     <!DOCTYPE html>
