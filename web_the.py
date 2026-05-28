@@ -202,7 +202,7 @@ def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
-    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
+    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     return no_bg_cv
 
@@ -470,10 +470,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (PHIÊN BẢN SIÊU CẤP 4 TÍNH NĂNG CAO)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (BẢN FIX CHROME - DIRECT PRINT)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
-    st.info("💡 Điểm mới: Đã tích hợp tính năng Mix Size, Chừa lề cắt xén (Crop marks), Điền tên học viên dưới chân ảnh, Tự căn giữa A4 và Nút In Trực Tiếp siêu tốc!")
+    st.info("💡 Điểm mới: Đã sửa lỗi nút In trực tiếp trên trình duyệt Google Chrome bằng phương pháp Blob-Window mở rộng.")
     
     html_code = """
     <!DOCTYPE html>
@@ -754,10 +754,9 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return list;
             }
 
-            // HÀM TẠO LAYOUT IN CHUNG (DÙNG CHO CẢ PREVIEW VÀ GENERATE PDF)
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
-                let gapX = 3, gapY = 4; // Tăng nhẹ gapY để chừa không gian điền tên
+                let gapX = 3, gapY = 4; 
                 let marginX = 10, marginY = 15;
 
                 let pages = [];
@@ -769,7 +768,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     function processBatch(qty, imgW, imgH, isSize4x6) {
                         if (qty === 0) return;
                         
-                        // Tính năng 3: Tự động căn giữa nếu cả lô ảnh nằm vừa trên 1 hàng ngang
                         let currentBatchStartX = marginX;
                         let requiredWidth = (qty * imgW) + ((qty - 1) * gapX);
                         let availableWidth = a4W - (2 * marginX);
@@ -843,13 +841,9 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         let pWidth = (img.w / 210) * 100 + '%';
                         let pHeight = (img.h / 297) * 100 + '%';
 
-                        // Vẽ ảnh
                         pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E0E0E0; box-sizing: border-box;">`;
-                        
-                        // Tính năng 1: Vẽ dấu gạch chéo/thập chừa lề cắt xén giả lập (Nét đứt mờ)
                         pagesHtml += `<div style="position:absolute; left:${(img.x-1.5)/210*100}%; top:${(img.y-1.5)/297*100}%; width:${(img.w+3)/210*100}%; height:${(img.h+3)/297*100}%; border:0.5px dashed #bbb; pointer-events:none; box-sizing:border-box;"></div>`;
 
-                        // Tính năng 2: Chèn tên học viên dưới chân ảnh
                         if (img.name) {
                             let labelTop = ((img.y + img.h - 3.5) / 297) * 100 + '%';
                             let labelFontSize = (img.w === 30) ? '8px' : '9px';
@@ -865,7 +859,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 document.getElementById('directPrintBtn').style.display = 'inline-block';
             });
 
-            // HÀM KHỞI TẠO FILE ĐỐI TƯỢNG JSDPDF CHUNG
             function generateJsPDFObject() {
                 let persons = getPersonsData();
                 const { jsPDF } = window.jspdf;
@@ -876,31 +869,22 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     if (pageIdx > 0) doc.addPage();
 
                     page.forEach(img => {
-                        // 1. In ảnh gốc
                         doc.addImage(img.data, img.type, img.x, img.y, img.w, img.h);
                         
-                        // 2. Viền cắt mảnh bao quanh ảnh
                         doc.setDrawColor(220, 220, 220);
                         doc.setLineWidth(0.08);
                         doc.rect(img.x, img.y, img.w, img.h, 'S');
 
-                        // Tính năng 1: Vẽ Dấu Chữ Thập Cắt Xén (Crop Marks) chuyên nghiệp tại 4 góc biên
                         doc.setDrawColor(150, 150, 150);
                         doc.setLineWidth(0.1);
-                        let s = 1.5; // độ dài vạch kẻ qua rìa
-                        // Góc top-left
+                        let s = 1.5; 
                         doc.line(img.x - s, img.y, img.x, img.y); doc.line(img.x, img.y - s, img.x, img.y);
-                        // Góc top-right
                         doc.line(img.x + img.w, img.y, img.x + img.w + s, img.y); doc.line(img.x + img.w, img.y - s, img.x + img.w, img.y);
-                        // Góc bottom-left
                         doc.line(img.x - s, img.y + img.h, img.x, img.y + img.h); doc.line(img.x, img.y + img.h, img.x, img.y + img.h + s);
-                        // Góc bottom-right
                         doc.line(img.x + img.w, img.y + img.h, img.x + img.w + s, img.y + img.h); doc.line(img.x + img.w, img.y + img.h, img.x + img.w, img.y + img.h + s);
 
-                        // Tính năng 2: Chèn chữ tên học viên dưới chân ảnh (Nằm lọt lòng ở đáy ảnh góc dưới)
                         if (img.name) {
                             doc.setFillColor(255, 255, 255);
-                            // Vẽ một dải nền trắng mờ cực mỏng ở đáy ảnh để chữ nổi bật
                             doc.rect(img.x + 0.2, img.y + img.h - 3.2, img.w - 0.4, 3, 'F');
                             doc.setTextColor(50, 50, 50);
                             let fSize = (img.w === 30) ? 5.5 : 6.5;
@@ -919,24 +903,24 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 doc.save('In_Anh_The_CaoCap_SHOPTINHOC.pdf');
             });
 
-            // Tính năng 4: XỬ LÝ IN NHANH TRỰC TIẾP KHÔNG CẦN TẢI XUỐNG
+            // FIX PHẦN IN TRỰC TIẾP CHO GOOGLE CHROME:
             document.getElementById('directPrintBtn').addEventListener('click', function() {
                 let doc = generateJsPDFObject();
-                // Sử dụng hàm autoPrint và mở trong cửa sổ iframe ẩn để kích hoạt lệnh in hệ thống
-                doc.autoPrint();
-                const blob = doc.output('bloburl');
                 
-                let iframe = document.getElementById('print_iframe');
-                if (!iframe) {
-                    iframe = document.createElement('iframe');
-                    iframe.id = 'print_iframe';
-                    iframe.style.position = 'fixed';
-                    iframe.style.width = '0px';
-                    iframe.style.height = '0px';
-                    iframe.style.border = 'none';
-                    document.body.appendChild(iframe);
+                // Chuyển đối tượng PDF thành định dạng Blob có đường dẫn cục bộ
+                const blobUrl = doc.output('bloburl');
+                
+                // Mở một cửa sổ mới độc lập chạy trực tiếp luồng in của Chrome (Bỏ qua cấu trúc Iframe bị chặn)
+                const printWindow = window.open(blobUrl, '_blank');
+                
+                if (printWindow) {
+                    printWindow.onload = function() {
+                        printWindow.focus();
+                        printWindow.print();
+                    };
+                } else {
+                    alert("Trình duyệt Chrome đã chặn Pop-up! Vui lòng bấm vào biểu tượng icon 'Cửa sổ bị chặn' ở góc trên cùng thanh địa chỉ URL để chọn 'Luôn cho phép hiển thị các cửa sổ từ trang này'.");
                 }
-                iframe.src = blob;
             });
         </script>
     </body>
@@ -996,7 +980,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V3.0.0 - Bản tối ưu in ấn thương mại")
+    st.caption("Phiên bản V3.1.0 - Sửa lỗi tương thích Chrome Print")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
