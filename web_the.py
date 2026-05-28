@@ -470,10 +470,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (BẢN CHUẨN ĐÃ FIX LỖI CÚ PHÁP)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (THU HẸP KHOẢNG CÁCH & BỎ CROP MARKS)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
-    st.info("💡 Điểm mới: Đã sửa lỗi nút In trực tiếp trên trình duyệt Google Chrome bằng phương pháp Blob-Window mở rộng.")
+    st.info("💡 Điểm mới: Khoảng cách giữa các ảnh đã được chỉnh hẹp lại sát nhau. Loại bỏ tính năng Chừa lề cắt xén (Crop Marks) theo yêu cầu!")
     
     html_code = """
     <!DOCTYPE html>
@@ -756,7 +756,8 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
-                let gapX = 3, gapY = 4; 
+                // CẢI TIẾN: Thu hẹp khoảng cách ảnh sát nhau hơn theo yêu cầu
+                let gapX = 1.5, gapY = 2; 
                 let marginX = 10, marginY = 15;
 
                 let pages = [];
@@ -841,13 +842,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         let pWidth = (img.w / 210) * 100 + '%';
                         let pHeight = (img.h / 297) * 100 + '%';
 
-                        pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E0E0E0; box-sizing: border-box;">`;
-                        pagesHtml += `<div style="position:absolute; left:${(img.x-1.5)/210*100}%; top:${(img.y-1.5)/297*100}%; width:${(img.w+3)/210*100}%; height:${(img.h+3)/297*100}%; border:0.5px dashed #bbb; pointer-events:none; box-sizing:border-box;"></div>`;
+                        // Vẽ phông ảnh thẻ chính
+                        pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
 
+                        // Hiển thị tên học viên dưới chân ảnh
                         if (img.name) {
-                            let labelTop = ((img.y + img.h - 3.5) / 297) * 100 + '%';
+                            let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
                             let labelFontSize = (img.w === 30) ? '8px' : '9px';
-                            pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.75); height:14px; line-height:14px;">${img.name}</div>`;
+                            pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.8); height:13px; line-height:13px;">${img.name}</div>`;
                         }
                     });
                     pagesHtml += `</div>`;
@@ -869,28 +871,23 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     if (pageIdx > 0) doc.addPage();
 
                     page.forEach(img => {
+                        // 1. Vẽ ảnh chính lên giấy A4
                         doc.addImage(img.data, img.type, img.x, img.y, img.w, img.h);
                         
-                        doc.setDrawColor(220, 220, 220);
+                        // 2. Viền khung cắt mảnh bao quanh viền phông ảnh (Bỏ tính năng Crop Marks chừa lề)
+                        doc.setDrawColor(225, 225, 225);
                         doc.setLineWidth(0.08);
                         doc.rect(img.x, img.y, img.w, img.h, 'S');
 
-                        doc.setDrawColor(150, 150, 150);
-                        doc.setLineWidth(0.1);
-                        let s = 1.5; 
-                        doc.line(img.x - s, img.y, img.x, img.y); doc.line(img.x, img.y - s, img.x, img.y);
-                        doc.line(img.x + img.w, img.y, img.x + img.w + s, img.y); doc.line(img.x + img.w, img.y - s, img.x + img.w, img.y);
-                        doc.line(img.x - s, img.y + img.h, img.x, img.y + img.h); doc.line(img.x, img.y + img.h, img.x, img.y + img.h + s);
-                        doc.line(img.x + img.w, img.y + img.h, img.x + img.w + s, img.y + img.h); doc.line(img.x + img.w, img.y + img.h, img.x + img.w, img.y + img.h + s);
-
+                        // 3. Chèn tên học viên dưới chân ảnh
                         if (img.name) {
                             doc.setFillColor(255, 255, 255);
-                            doc.rect(img.x + 0.2, img.y + img.h - 3.2, img.w - 0.4, 3, 'F');
-                            doc.setTextColor(50, 50, 50);
+                            doc.rect(img.x + 0.2, img.y + img.h - 3.0, img.w - 0.4, 2.8, 'F');
+                            doc.setTextColor(60, 60, 60);
                             let fSize = (img.w === 30) ? 5.5 : 6.5;
                             doc.setFontSize(fSize);
                             doc.setFont("Helvetica", "bold");
-                            doc.text(img.name, img.x + (img.w / 2), img.y + img.h - 1, { align: 'center' });
+                            doc.text(img.name, img.x + (img.w / 2), img.y + img.h - 0.8, { align: 'center' });
                         }
                     });
                 });
@@ -900,10 +897,10 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             // XỬ LÝ TẢI FILE PDF
             document.getElementById('downloadBtn').addEventListener('click', function() {
                 let doc = generateJsPDFObject();
-                doc.save('In_Anh_The_CaoCap_SHOPTINHOC.pdf');
+                doc.save('In_Anh_The_MixSize_SHOPTINHOC.pdf');
             });
 
-            // FIX PHẦN IN TRỰC TIẾP CHO GOOGLE CHROME:
+            // XỬ LÝ IN TRỰC TIẾP TRÊN CHROME (POP-UP WINDOW)
             document.getElementById('directPrintBtn').addEventListener('click', function() {
                 let doc = generateJsPDFObject();
                 const blobUrl = doc.output('bloburl');
@@ -976,7 +973,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V3.1.1 - Sửa hoàn toàn lỗi cú pháp alpha_matting")
+    st.caption("Phiên bản V3.1.2 - Tối ưu khoảng cách sát biên")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
