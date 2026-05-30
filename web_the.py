@@ -202,16 +202,24 @@ def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
-    no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
     
-    # Chuyển đổi sang định dạng OpenCV BGRA để xử lý viền nâng cao
+    # Đã giảm alpha_matting_erode_size xuống 2 để tránh cắt sâu vào áo
+    no_bg_pil = remove(
+        image, 
+        session=session, 
+        alpha_matting=True, 
+        alpha_matting_foreground_threshold=240, 
+        alpha_matting_background_threshold=10, 
+        alpha_matting_erode_size=2 
+    )
+    
+    # Chuyển đổi sang định dạng OpenCV BGRA
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     
-    # --- THUẬT TOÁN TỰ ĐỘNG LÀM MỊN VIỀN ÁO & KHỬ BÉN ---
+    # Khử lớp mờ GaussianBlur gây lem viền, sử dụng Threshold để viền sắc nét hơn
     b, g, r, alpha = cv2.split(no_bg_cv)
-    # Áp dụng bộ lọc Gaussian làm mềm gắt cạnh lỗi của mặt nạ tách nền (Alpha channel)
-    alpha_smooth = cv2.GaussianBlur(alpha, (5, 5), 0)
-    no_bg_cv = cv2.merge([b, g, r, alpha_smooth])
+    _, alpha_sharp = cv2.threshold(alpha, 200, 255, cv2.THRESH_BINARY)
+    no_bg_cv = cv2.merge([b, g, r, alpha_sharp])
     
     return no_bg_cv
 
@@ -1081,7 +1089,7 @@ with col_result:
             buf = io.BytesIO()
             final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
             safe_bg_name = {"Trắng": "white", "Xanh Chuẩn": "blue_standard", "Xanh Nhạt": "blue_light", "Xanh GPLX": "blue_gplx"}.get(bg_name, "custom")
-            st.download_button(label="⬇️ Tải Ảnh JPG Chất Lượng Cao", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg", type="primary", use_container_width=True)
+            st.download_button(label="⬇️ Tải Ảnh JPG Chất lượng Cao", data=buf.getvalue(), file_name=f"anh_the_{safe_bg_name}.jpg", mime="image/jpeg", type="primary", use_container_width=True)
 
         with d_tab2:
             st.image(create_print_layout_preview(final_rgb, size_option), caption=f"Xem trước bản in ({'Khổ A4' if '4x6' in size_option else 'Khổ A6'})", use_container_width=True)
