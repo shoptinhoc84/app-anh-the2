@@ -203,7 +203,16 @@ def process_raw_to_nobg(file_input):
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
     no_bg_pil = remove(image, session=session, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10, alpha_matting_erode_size=10)
+    
+    # Chuyển đổi sang định dạng OpenCV BGRA để xử lý viền nâng cao
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
+    
+    # --- THUẬT TOÁN TỰ ĐỘNG LÀM MỊN VIỀN ÁO & KHỬ BÉN ---
+    b, g, r, alpha = cv2.split(no_bg_cv)
+    # Áp dụng bộ lọc Gaussian làm mềm gắt cạnh lỗi của mặt nạ tách nền (Alpha channel)
+    alpha_smooth = cv2.GaussianBlur(alpha, (5, 5), 0)
+    no_bg_cv = cv2.merge([b, g, r, alpha_smooth])
+    
     return no_bg_cv
 
 def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="MediaPipe"):
@@ -756,7 +765,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
-                // CẢI TIẾN: Thu hẹp khoảng cách ảnh sát nhau hơn theo yêu cầu
                 let gapX = 1.5, gapY = 2; 
                 let marginX = 10, marginY = 15;
 
@@ -826,7 +834,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return pages;
             }
 
-            // XỬ LÝ PREVIEW MÀN HÌNH
             document.getElementById('previewBtn').addEventListener('click', function() {
                 let persons = getPersonsData();
                 if (persons.length === 0) return alert("Vui lòng tải ảnh lên và nhập số lượng!");
@@ -842,10 +849,8 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         let pWidth = (img.w / 210) * 100 + '%';
                         let pHeight = (img.h / 297) * 100 + '%';
 
-                        // Vẽ phông ảnh thẻ chính
                         pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
 
-                        // Hiển thị tên học viên dưới chân ảnh
                         if (img.name) {
                             let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
                             let labelFontSize = (img.w === 30) ? '8px' : '9px';
@@ -871,15 +876,12 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     if (pageIdx > 0) doc.addPage();
 
                     page.forEach(img => {
-                        // 1. Vẽ ảnh chính lên giấy A4
                         doc.addImage(img.data, img.type, img.x, img.y, img.w, img.h);
                         
-                        // 2. Viền khung cắt mảnh bao quanh viền phông ảnh (Bỏ tính năng Crop Marks chừa lề)
                         doc.setDrawColor(225, 225, 225);
                         doc.setLineWidth(0.08);
                         doc.rect(img.x, img.y, img.w, img.h, 'S');
 
-                        // 3. Chèn tên học viên dưới chân ảnh
                         if (img.name) {
                             doc.setFillColor(255, 255, 255);
                             doc.rect(img.x + 0.2, img.y + img.h - 3.0, img.w - 0.4, 2.8, 'F');
@@ -894,13 +896,11 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return doc;
             }
 
-            // XỬ LÝ TẢI FILE PDF
             document.getElementById('downloadBtn').addEventListener('click', function() {
                 let doc = generateJsPDFObject();
                 doc.save('In_Anh_The_MixSize_SHOPTINHOC.pdf');
             });
 
-            // XỬ LÝ IN TRỰC TIẾP TRÊN CHROME (POP-UP WINDOW)
             document.getElementById('directPrintBtn').addEventListener('click', function() {
                 let doc = generateJsPDFObject();
                 const blobUrl = doc.output('bloburl');
