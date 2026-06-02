@@ -484,7 +484,7 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ THÊM ĐỔI NỀN XANH CHUẨN)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ SỬA LỖI ĐỔI NỀN XANH THÀNH CÔNG)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     st.info("IN ẢNH PRO")
@@ -508,7 +508,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             }
             h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
             
-            /* Khu vực cấu hình phông nền chung */
             .global-settings {
                 background: #f8f9fa; border: 1px solid #e2e8f0; padding: 15px; 
                 border-radius: 12px; margin-bottom: 25px; display: flex; 
@@ -598,8 +597,8 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             <div class="global-settings">
                 <label for="backgroundColorSelect">🎨 Chọn Màu Nền In Tất Cả Ảnh:</label>
                 <select id="backgroundColorSelect">
-                    <option value="WHITE" selected>Nền Trắng (Mặc định)</option>
-                    <option value="BLUE">Nền Xanh Chuẩn (Giống 123.jpg)</option>
+                    <option value="WHITE" selected>Giữ nguyên nền gốc ảnh tải lên</option>
+                    <option value="BLUE">Chuyển sang nền Xanh Chuẩn (123.jpg)</option>
                 </select>
             </div>
 
@@ -789,20 +788,35 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return list;
             }
 
-            // HÀM CHUYỂN ĐỔI NỀN ẢNH SANG XANH TRÊN THIẾT BỊ BẰNG HTML5 CANVAS
-            function changeBackgroundToBlue(base64Str, callback) {
+            // THUẬT TOÁN ĐỔI PHÔNG NỀN CHUYÊN NGHIỆP: QUÉT MÀU NỀN TRẮNG/SÁNG VÀ THAY BẰNG XANH CHUẨN
+            function smartChangeToBlueBackground(base64Str, callback) {
                 const img = new Image();
                 img.onload = function() {
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width;
                     canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
-                    
-                    // Mã màu xanh lục trích xuất chính xác theo file 123.jpg: #4285f5 -> rgb(66, 133, 245)
-                    ctx.fillStyle = "rgb(66, 133, 245)";
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
                     
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imgData.data;
+                    
+                    // Quét từng điểm ảnh (Pixel), nếu là vùng nền sáng (Trắng/Xám nhạt) thì đổi sang Xanh
+                    for (let i = 0; i < data.length; i += 4) {
+                        let r = data[i];
+                        let g = data[i+1];
+                        let b = data[i+2];
+                        
+                        // Điều kiện nhận diện phông nền sáng (RGB đều lớn hơn 150 hoặc lệch màu không đáng kể)
+                        if ((r > 140 && g > 140 && b > 140) || (r > 200 || g > 200 || b > 200)) {
+                            // Ép chuẩn màu xanh 123.jpg: rgb(66, 133, 245)
+                            data[i] = 66;     // R
+                            data[i+1] = 133;  // G
+                            data[i+2] = 245;  // B
+                        }
+                    }
+                    
+                    ctx.putImageData(imgData, 0, 0);
                     callback(canvas.toDataURL('image/jpeg', 1.0));
                 };
                 img.src = base64Str;
@@ -852,7 +866,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
                             currentPage.push({
                                 data: person.processedData ? person.processedData : person.data,
-                                type: 'JPEG', // Khi convert canvas sẽ ép về JPEG để đồng bộ
+                                type: 'JPEG',
                                 x: curX,
                                 y: curY,
                                 w: imgW,
@@ -884,8 +898,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 if (persons.length === 0) return alert("Vui lòng tải ảnh lên và nhập số lượng!");
 
                 const bgMode = document.getElementById('backgroundColorSelect').value;
-                
-                // Đồng bộ xử lý đổi nền hàng loạt nếu chọn chế độ BLUE
                 let processedCount = 0;
                 
                 function runRender() {
@@ -919,7 +931,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
                 if (bgMode === "BLUE") {
                     persons.forEach((p) => {
-                        changeBackgroundToBlue(p.data, function(newBase64) {
+                        smartChangeToBlueBackground(p.data, function(newBase64) {
                             p.processedData = newBase64;
                             processedCount++;
                             if (processedCount === persons.length) {
@@ -928,7 +940,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         });
                     });
                 } else {
-                    persons.forEach(p => p.processedData = null); // reset về gốc nếu chọn lại trắng
+                    persons.forEach(p => p.processedData = null);
                     runRender();
                 }
             });
@@ -986,7 +998,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     </body>
     </html>
     """
-    components.html(html_code, height=2000, scrolling=True)
+    components.html(html_code, height=2050, scrolling=True)
     st.stop()
 
 
