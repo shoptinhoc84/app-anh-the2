@@ -7,14 +7,6 @@ import io
 import gc
 import streamlit.components.v1 as components
 
-# --- BẢO VỆ CHỐNG SẬP KHI THIẾU THƯ VIỆN ---
-try:
-    import mediapipe as mp
-    from mediapipe.python.solutions import face_detection as mp_face_detection
-    HAS_MEDIAPIPE = True
-except ImportError:
-    HAS_MEDIAPIPE = False
-
 try:
     from fpdf import FPDF
     HAS_FPDF = True
@@ -140,70 +132,11 @@ def resize_image_input(image, max_height=1200):
         return image.resize((new_w, max_height), Image.Resampling.LANCZOS)
     return image
 
-def rotate_image(image, angle):
-    (h, w) = image.shape[:2]
-    center = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
-    return rotated
-
-def get_face_angle(gray_img, face_rect):
-    (x, y, w, h) = face_rect
-    roi_gray = gray_img[y:y+h, x:x+w]
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
-    if len(eyes) >= 2:
-        eyes = sorted(eyes, key=lambda e: e[0])
-        p1 = (eyes[0][0] + eyes[0][2]//2, eyes[0][1] + eyes[0][3]//2)
-        p2 = (eyes[-1][0] + eyes[-1][2]//2, eyes[-1][1] + eyes[-1][3]//2)
-        delta_x = p2[0] - p1[0]
-        delta_y = p2[1] - p1[1]
-        if delta_x < w/5: return 0.0
-        return np.degrees(np.arctan2(delta_y, delta_x))
-    return 0.0
-
-def detect_face_mediapipe(img_bgra):
-    if not HAS_MEDIAPIPE: return None, 0.0
-    img_rgb = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2RGB)
-    h, w, _ = img_rgb.shape
-    
-    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-        results = face_detection.process(img_rgb)
-        
-        if not results.detections:
-            return None, 0.0
-            
-        detection = results.detections[0]
-        bboxC = detection.location_data.relative_bounding_box
-        
-        x = int(bboxC.xmin * w)
-        y = int(bboxC.ymin * h)
-        width = int(bboxC.width * w)
-        height = int(bboxC.height * h)
-        face_rect = (x, y, width, height)
-        
-        right_eye = detection.location_data.relative_keypoints[0]
-        left_eye = detection.location_data.relative_keypoints[1]
-        
-        p1 = (int(right_eye.x * w), int(right_eye.y * h))
-        p2 = (int(left_eye.x * w), int(left_eye.y * h))
-        
-        delta_x = p2[0] - p1[0]
-        delta_y = p2[1] - p1[1]
-        
-        if delta_x == 0: 
-            angle = 0.0
-        else:
-            angle = np.degrees(np.arctan2(delta_y, delta_x))
-            
-        return face_rect, angle
-
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
     
-    # Đã giảm alpha_matting_erode_size xuống 2 để tránh cắt sâu vào áo
     no_bg_pil = remove(
         image, 
         session=session, 
@@ -213,78 +146,34 @@ def process_raw_to_nobg(file_input):
         alpha_matting_erode_size=2 
     )
     
-    # Chuyển đổi sang định dạng OpenCV BGRA
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
-    
-    # Khử lớp mờ GaussianBlur gây lem viền, sử dụng Threshold để viền sắc nét hơn
     b, g, r, alpha = cv2.split(no_bg_cv)
     _, alpha_sharp = cv2.threshold(alpha, 200, 255, cv2.THRESH_BINARY)
     no_bg_cv = cv2.merge([b, g, r, alpha_sharp])
-    
     return no_bg_cv
 
-def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="MediaPipe"):
+def crop_final_image_center(no_bg_img, target_ratio):
     try:
         img_working = no_bg_img.copy()
-        
-        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
-            result = detect_face_mediapipe(img_working)
-            if result[0] is None: return None, "Không tìm thấy khuôn mặt (MediaPipe)", 0
-            face_rect, auto_angle = result
-            (x, y, w, h) = face_rect
+        h, w, _ = img_working.shape
+
+        if w / h > target_ratio:
+            crop_h = h
+            crop_w = int(h * target_ratio)
+            left_x = (w - crop_w) // 2
+            top_y = 0
         else:
-            gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
-            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            faces = face_cascade.detectMultiScale(gray, 1.1, 5)
-            if len(faces) == 0: return None, "Không tìm thấy khuôn mặt (Haarcascade)", 0
-            face_rect = max(faces, key=lambda f: f[2] * f[3])
-            auto_angle = get_face_angle(gray, face_rect)
-            (x, y, w, h) = face_rect
+            crop_w = w
+            crop_h = int(w / target_ratio)
+            left_x = 0
+            top_y = (h - crop_h) // 2
 
-        if abs(auto_angle) < 1.0 or abs(auto_angle) > 20.0: auto_angle = 0.0 
-
-        total_angle = auto_angle + manual_angle
-        img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
-
-        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
-            result_new = detect_face_mediapipe(img_rotated)
-            if result_new[0] is not None:
-                (x, y, w, h) = result_new[0]
-        else:
-            gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
-            faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
-            if len(faces_new) > 0:
-                (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3])
-
-        if target_ratio == 1.0: 
-            zoom_factor = 1.8  
-            top_offset = 0.55 
-        elif 0.77 <= target_ratio <= 0.78: 
-            zoom_factor = 1.7  
-            top_offset = 0.50 
-        elif 0.68 <= target_ratio <= 0.69: 
-            zoom_factor = 1.75 
-            top_offset = 0.50  
-        elif target_ratio < 0.7: 
-            zoom_factor = 2.0  
-            top_offset = 0.45   
-        else: 
-            zoom_factor = 2.2
-            top_offset = 0.5
-
-        crop_h = int(h * zoom_factor) 
-        crop_w = int(crop_h * target_ratio)
-        
-        face_center_x = x + w // 2
-        top_y = int(y - (h * top_offset)) 
-        left_x = int(face_center_x - crop_w // 2)
-
-        img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
+        img_pil = Image.fromarray(cv2.cvtColor(img_working, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
-        return canvas, f"Góc Auto ({detector_type}): {auto_angle:.1f}°", total_angle
+        return canvas
     except Exception as e:
-        return None, str(e), 0
+        return None
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
@@ -381,7 +270,6 @@ def apply_advanced_effects(base_img, params):
         img_bgr = apply_super_sharpen(img_bgr, params['sharp_amount'])
 
     final_bgra = cv2.merge([img_bgr[:,:,0], img_bgr[:,:,1], img_bgr[:,:,2], a])
-    
     img_pil = Image.fromarray(cv2.cvtColor(final_bgra, cv2.COLOR_BGRA2RGBA))
     if params['exposure'] != 1.0:
         img_pil = ImageEnhance.Brightness(img_pil).enhance(params['exposure'])
@@ -391,7 +279,6 @@ def apply_advanced_effects(base_img, params):
 
 def create_pdf(img_person, size_type):
     if not HAS_FPDF: return None
-    
     if "4x6" in size_type:
         pdf = FPDF(orientation='P', unit='mm', format='A4') 
     else:
@@ -474,20 +361,15 @@ def create_print_layout_preview(img_person, size_type):
     return bg_paper
 
 # --- 3. GIAO DIỆN CHÍNH ---
-
 st.markdown('<div class="main-title">📸 HỆ SINH THÁI ẢNH THẺ SHOPTINHOC</div>', unsafe_allow_html=True)
 
-if not HAS_FPDF:
-    st.warning("⚠️ Chưa cài thư viện in ấn fpdf. Vui lòng kiểm tra requirements.txt")
-
-# --- MENU CHUYỂN CHẾ ĐỘ HOẠT ĐỘNG TẠI THANH BÊN ---
 with st.sidebar:
     st.header("🛠️ Menu Chức Năng")
     app_mode = st.radio("Chọn chế độ:", ["📸 Studio Xử Lý (1 Người)", "👥 Tool Ghép In A4 (Số lượng lớn)"])
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (THU HẸP KHOẢNG CÁCH & BỎ CROP MARKS)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ TÍCH HỢP TÁCH NỀN TRẮNG SANG XANH)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     st.info("IN ẢNH PRO")
@@ -511,6 +393,18 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             }
             h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
             
+            .global-settings {
+                background: #f8f9fa; border: 1px solid #e2e8f0; padding: 15px; 
+                border-radius: 12px; margin-bottom: 25px; display: flex; 
+                justify-content: center; align-items: center; gap: 15px;
+            }
+            .global-settings label { font-weight: bold; color: #4a5568; font-size: 15px;}
+            .global-settings select {
+                padding: 8px 16px; border-radius: 8px; border: 2px solid #cbd5e0;
+                font-weight: bold; outline: none; background: white; cursor: pointer; color: #2d3748;
+            }
+            .global-settings select:focus { border-color: #4287f5; }
+
             .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px;}
             .person-box { 
                 flex: 1; border: 2px dashed #b8c2cc; padding: 15px 10px; border-radius: 14px; 
@@ -585,6 +479,14 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
         <div class="container">
             <h2>HỆ THỐNG XẾP IN HỒ SƠ CAO CẤP SHOPTINHOC</h2>
             
+            <div class="global-settings">
+                <label for="backgroundColorSelect">🎨 Chọn màu nền in tất cả ảnh:</label>
+                <select id="backgroundColorSelect">
+                    <option value="WHITE" selected>Giữ nguyên nền gốc ảnh khách tải lên</option>
+                    <option value="BLUE">Tự động tách nền trắng ➔ Nền Xanh Chuẩn (123.jpg)</option>
+                </select>
+            </div>
+
             <div class="upload-group">
                 <div class="person-box">
                     <h4>👤 Người thứ 1</h4>
@@ -771,6 +673,81 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return list;
             }
 
+            // THUẬT TOÁN TÁCH NỀN TRẮNG CHUYÊN NGHIỆP: CHỈ LOANG VÙNG RÌA, KHÔNG CHẠM VÀO NGƯỜI
+            function smartChangeToBlueBackground(base64Str, callback) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    
+                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imgData.data;
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    
+                    // Lấy màu mẫu ở góc (0,0) làm chuẩn nền ban đầu
+                    const startR = data[0];
+                    const startG = data[1];
+                    const startB = data[2];
+                    
+                    // Khởi tạo mảng đánh dấu điểm đã quét qua
+                    const visited = new Uint8Array(width * height);
+                    const queue = [];
+                    
+                    // Đưa toàn bộ 4 hàng rìa của ảnh thẻ vào hàng đợi Flood Fill ban đầu
+                    for (let x = 0; x < width; x++) {
+                        queue.push([x, 0]); queue.push([x, height - 1]);
+                        visited[x] = 1; visited[(height - 1) * width + x] = 1;
+                    }
+                    for (let y = 1; y < height - 1; y++) {
+                        queue.push([0, y]); queue.push([width - 1, y]);
+                        visited[y * width] = 1; visited[y * width + (width - 1)] = 1;
+                    }
+                    
+                    // Ngưỡng dung sai nhận diện màu trắng/sáng của phông cũ
+                    const tolerance = 48;
+                    
+                    while (queue.length > 0) {
+                        const [cx, cy] = queue.shift();
+                        const idx = (cy * width + cx) * 4;
+                        
+                        let r = data[idx];
+                        let g = data[idx+1];
+                        let b = data[idx+2];
+                        
+                        // Tính toán độ lệch màu của pixel hiện tại so với màu rìa nền cũ
+                        let diff = Math.sqrt((r-startR)*(r-startR) + (g-startG)*(g-startG) + (b-startB)*(b-startB));
+                        
+                        // Nếu thỏa mãn điều kiện phông sáng mờ hoặc trắng hoàn toàn
+                        if (diff <= tolerance || (r > 160 && g > 160 && b > 160)) {
+                            // Thay thế trực tiếp thành màu xanh chuẩn: rgb(66, 133, 245)
+                            data[idx] = 66;
+                            data[idx+1] = 133;
+                            data[idx+2] = 245;
+                            
+                            // Loang sang 4 phía xung quanh điểm hiện tại
+                            const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
+                            for (const [nx, ny] of neighbors) {
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const nIdx = ny * width + nx;
+                                    if (visited[nIdx] === 0) {
+                                        visited[nIdx] = 1;
+                                        queue.push([nx, ny]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    ctx.putImageData(imgData, 0, 0);
+                    callback(canvas.toDataURL('image/jpeg', 1.0));
+                };
+                img.src = base64Str;
+            }
+
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
                 let gapX = 1.5, gapY = 2; 
@@ -814,8 +791,8 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                             }
 
                             currentPage.push({
-                                data: person.data,
-                                type: person.type,
+                                data: person.processedData ? person.processedData : person.data,
+                                type: 'JPEG',
                                 x: curX,
                                 y: curY,
                                 w: imgW,
@@ -846,32 +823,53 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 let persons = getPersonsData();
                 if (persons.length === 0) return alert("Vui lòng tải ảnh lên và nhập số lượng!");
 
-                let pages = buildLayoutData(persons);
-                let pagesHtml = '';
+                const bgMode = document.getElementById('backgroundColorSelect').value;
+                let processedCount = 0;
+                
+                function runRender() {
+                    let pages = buildLayoutData(persons);
+                    let pagesHtml = '';
 
-                pages.forEach(page => {
-                    pagesHtml += `<div class="a4-page-preview" style="aspect-ratio: 210/297; border: 1px solid #777; background:#fff; margin-bottom:20px; position:relative;">`;
-                    page.forEach(img => {
-                        let pLeft = (img.x / 210) * 100 + '%';
-                        let pTop = (img.y / 297) * 100 + '%';
-                        let pWidth = (img.w / 210) * 100 + '%';
-                        let pHeight = (img.h / 297) * 100 + '%';
+                    pages.forEach(page => {
+                        pagesHtml += `<div class="a4-page-preview" style="aspect-ratio: 210/297; border: 1px solid #777; background:#fff; margin-bottom:20px; position:relative;">`;
+                        page.forEach(img => {
+                            let pLeft = (img.x / 210) * 100 + '%';
+                            let pTop = (img.y / 297) * 100 + '%';
+                            let pWidth = (img.w / 210) * 100 + '%';
+                            let pHeight = (img.h / 297) * 100 + '%';
 
-                        pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
+                            pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
 
-                        if (img.name) {
-                            let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
-                            let labelFontSize = (img.w === 30) ? '8px' : '9px';
-                            pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.8); height:13px; line-height:13px;">${img.name}</div>`;
-                        }
+                            if (img.name) {
+                                let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
+                                let labelFontSize = (img.w === 30) ? '8px' : '9px';
+                                pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.8); height:13px; line-height:13px;">${img.name}</div>`;
+                            }
+                        });
+                        pagesHtml += `</div>`;
                     });
-                    pagesHtml += `</div>`;
-                });
 
-                document.getElementById('pdfIframeContainer').innerHTML = pagesHtml;
-                document.getElementById('previewContainer').style.display = 'block';
-                document.getElementById('downloadBtn').style.display = 'inline-block';
-                document.getElementById('directPrintBtn').style.display = 'inline-block';
+                    document.getElementById('pdfIframeContainer').innerHTML = pagesHtml;
+                    document.getElementById('previewContainer').style.display = 'block';
+                    document.getElementById('downloadBtn').style.display = 'inline-block';
+                    document.getElementById('directPrintBtn').style.display = 'inline-block';
+                }
+
+                // Nếu bật chế độ màu BLUE, xử lý hoán đổi phông rìa trắng sang xanh trước khi dàn layout
+                if (bgMode === "BLUE") {
+                    persons.forEach((p) => {
+                        smartChangeToBlueBackground(p.data, function(newBase64) {
+                            p.processedData = newBase64;
+                            processedCount++;
+                            if (processedCount === persons.length) {
+                                runRender();
+                            }
+                        });
+                    });
+                } else {
+                    persons.forEach(p => p.processedData = null);
+                    runRender();
+                }
             });
 
             function generateJsPDFObject() {
@@ -885,7 +883,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
                     page.forEach(img => {
                         doc.addImage(img.data, img.type, img.x, img.y, img.w, img.h);
-                        
                         doc.setDrawColor(225, 225, 225);
                         doc.setLineWidth(0.08);
                         doc.rect(img.x, img.y, img.w, img.h, 'S');
@@ -920,21 +917,20 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                         printWindow.print();
                     };
                 } else {
-                    alert("Trình duyệt Chrome đã chặn Pop-up! Vui lòng bấm vào biểu tượng icon 'Cửa sổ bị chặn' ở góc trên cùng thanh địa chỉ URL để chọn 'Luôn cho phép hiển thị các cửa sổ từ trang này'.");
+                    alert("Trình duyệt Chrome đã chặn Pop-up! Vui lòng chọn 'Luôn cho phép hiển thị cửa sổ từ trang này'.");
                 }
             });
         </script>
     </body>
     </html>
     """
-    components.html(html_code, height=1950, scrolling=True)
+    components.html(html_code, height=2050, scrolling=True)
     st.stop()
 
 
 # ==============================================================================
 # HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ STUDIO XỬ LÝ (GIỮ NGUYÊN HOÀN HẢO LOGIC CŨ)
 # ==============================================================================
-
 with st.sidebar:
     st.header("⚙️ Thiết lập Đầu vào")
     st.info("Bước 1: Chọn ảnh và loại ảnh")
@@ -945,15 +941,6 @@ with st.sidebar:
         input_file = st.file_uploader("Chọn file (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
     else:
         input_file = st.camera_input("Chụp ảnh ngay")
-
-    st.markdown("---")
-    st.subheader("🤖 Công nghệ AI Nhận diện")
-    if HAS_MEDIAPIPE:
-        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
-        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
-    else:
-        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
-        detector_type = "Haarcascade"
 
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
@@ -981,7 +968,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V3.1.2 - Tối ưu khoảng cách sát biên")
+    st.caption("Phiên bản V3.2.1 - Tách nền Frontend siêu tốc")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -1008,20 +995,14 @@ with col_btn2:
     st.button("🔄 Làm lại", on_click=reset_beauty_params, use_container_width=True)
 
 st.divider()
-
 col_tools, col_result = st.columns([1, 1.2])
 
 with col_tools:
     st.subheader("🎛️ Bảng điều khiển")
-    
-    manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     if 'raw_nobg' in st.session_state:
-        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio, detector_type)
-        if final_crop: st.session_state.base = final_crop
-        else: st.error(f"Lỗi: {debug_info}")
+        st.session_state.base = crop_final_image_center(st.session_state.raw_nobg, target_ratio)
 
     tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
-    
     with tab1:
         st.caption("Chỉnh độ sáng và màu sắc")
         p_exposure = st.slider("Độ sáng", 0.5, 1.5, st.session_state.get('val_exposure', 1.0), 0.05, key="val_exposure")
@@ -1036,13 +1017,9 @@ with col_tools:
         p_smooth = st.slider("Mịn da", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
         p_makeup = st.slider("Trang điểm", 0, 50, st.session_state.get('val_makeup', 0), key="val_makeup")
         st.markdown("---")
-        
         ai_enabled = st.checkbox("Dùng Preset AI (Nam/Nữ)", key='ai_enabled')
         if ai_enabled:
-            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], 
-                                  horizontal=True, 
-                                  key="gender_radio", 
-                                  on_change=apply_gender_preset)
+            gender_style = st.radio("Chọn giới tính:", ["Nam", "Nữ"], horizontal=True, key="gender_radio", on_change=apply_gender_preset)
 
     with tab3:
         st.caption("Căn chỉnh vị trí và độ nét")
@@ -1050,7 +1027,6 @@ with col_tools:
         col_m1, col_m2 = st.columns(2)
         with col_m1: p_move_x = st.number_input("Dịch Ngang", -100, 100, st.session_state.get('val_move_x', 0), key="val_move_x")
         with col_m2: p_move_y = st.number_input("Dịch Dọc", -100, 100, st.session_state.get('val_move_y', 0), key="val_move_y")
-        
         st.markdown("---")
         p_sharp_amount = st.slider("Độ sắc nét", 0, 50, st.session_state.get('val_sharp_amount', 0), key="val_sharp_amount")
         p_clarity = st.slider("Chi tiết", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
@@ -1059,12 +1035,9 @@ with col_tools:
         p_edge_soft = st.slider("Làm mềm biên", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
 
     params = {
-        'smooth': p_smooth, 'makeup': p_makeup,
-        'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
-        'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 
-        'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
-        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y,
-        'edge_soft': p_edge_soft
+        'smooth': p_smooth, 'makeup': p_makeup, 'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
+        'sharp_amount': p_sharp_amount, 'clarity': p_clarity, 'dehaze': p_dehaze, 'blacks': p_blacks, 'whites': p_whites, 'denoise': p_denoise,
+        'zoom': p_zoom, 'move_x': p_move_x, 'move_y': p_move_y, 'edge_soft': p_edge_soft
     }
 
 # --- D. HIỂN THỊ KẾT QUẢ ---
@@ -1084,7 +1057,6 @@ with col_result:
 
         st.markdown("### 📥 Tải về & In ấn")
         d_tab1, d_tab2 = st.tabs(["Lưu Ảnh (JPG)", "In Ấn (PDF)"])
-        
         with d_tab1:
             buf = io.BytesIO()
             final_rgb.save(buf, format="JPEG", quality=95, dpi=(300, 300))
@@ -1104,7 +1076,6 @@ with col_result:
             c_before, c_after = st.columns(2)
             with c_before: st.image(st.session_state.base, caption="Gốc")
             with c_after: st.image(final_rgb, caption="Sau chỉnh sửa")
-
     else:
         st.info("👈 Mời bạn chọn ảnh ở cột bên trái để bắt đầu.")
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
