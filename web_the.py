@@ -7,6 +7,14 @@ import io
 import gc
 import streamlit.components.v1 as components
 
+# --- BẢO VỆ CHỐNG SẬP KHI THIẾU THƯ VIỆN ---
+try:
+    import mediapipe as mp
+    from mediapipe.python.solutions import face_detection as mp_face_detection
+    HAS_MEDIAPIPE = True
+except ImportError:
+    HAS_MEDIAPIPE = False
+
 try:
     from fpdf import FPDF
     HAS_FPDF = True
@@ -132,11 +140,70 @@ def resize_image_input(image, max_height=1200):
         return image.resize((new_w, max_height), Image.Resampling.LANCZOS)
     return image
 
+def rotate_image(image, angle):
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+    return rotated
+
+def get_face_angle(gray_img, face_rect):
+    (x, y, w, h) = face_rect
+    roi_gray = gray_img[y:y+h, x:x+w]
+    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+    eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 5)
+    if len(eyes) >= 2:
+        eyes = sorted(eyes, key=lambda e: e[0])
+        p1 = (eyes[0][0] + eyes[0][2]//2, eyes[0][1] + eyes[0][3]//2)
+        p2 = (eyes[-1][0] + eyes[-1][2]//2, eyes[-1][1] + eyes[-1][3]//2)
+        delta_x = p2[0] - p1[0]
+        delta_y = p2[1] - p1[1]
+        if delta_x < w/5: return 0.0
+        return np.degrees(np.arctan2(delta_y, delta_x))
+    return 0.0
+
+def detect_face_mediapipe(img_bgra):
+    if not HAS_MEDIAPIPE: return None, 0.0
+    img_rgb = cv2.cvtColor(img_bgra, cv2.COLOR_BGRA2RGB)
+    h, w, _ = img_rgb.shape
+    
+    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
+        results = face_detection.process(img_rgb)
+        
+        if not results.detections:
+            return None, 0.0
+            
+        detection = results.detections[0]
+        bboxC = detection.location_data.relative_bounding_box
+        
+        x = int(bboxC.xmin * w)
+        y = int(bboxC.ymin * h)
+        width = int(bboxC.width * w)
+        height = int(bboxC.height * h)
+        face_rect = (x, y, width, height)
+        
+        right_eye = detection.location_data.relative_keypoints[0]
+        left_eye = detection.location_data.relative_keypoints[1]
+        
+        p1 = (int(right_eye.x * w), int(right_eye.y * h))
+        p2 = (int(left_eye.x * w), int(left_eye.y * h))
+        
+        delta_x = p2[0] - p1[0]
+        delta_y = p2[1] - p1[1]
+        
+        if delta_x == 0: 
+            angle = 0.0
+        else:
+            angle = np.degrees(np.arctan2(delta_y, delta_x))
+            
+        return face_rect, angle
+
 def process_raw_to_nobg(file_input):
     image = Image.open(file_input)
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
     
+    # Đã giảm alpha_matting_erode_size xuống 2 để tránh cắt sâu vào áo
     no_bg_pil = remove(
         image, 
         session=session, 
@@ -146,37 +213,78 @@ def process_raw_to_nobg(file_input):
         alpha_matting_erode_size=2 
     )
     
+    # Chuyển đổi sang định dạng OpenCV BGRA
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     
+    # Khử lớp mờ GaussianBlur gây lem viền, sử dụng Threshold để viền sắc nét hơn
     b, g, r, alpha = cv2.split(no_bg_cv)
     _, alpha_sharp = cv2.threshold(alpha, 200, 255, cv2.THRESH_BINARY)
     no_bg_cv = cv2.merge([b, g, r, alpha_sharp])
     
     return no_bg_cv
 
-def crop_final_image_center(no_bg_img, target_ratio):
+def crop_final_image(no_bg_img, manual_angle, target_ratio, detector_type="MediaPipe"):
     try:
         img_working = no_bg_img.copy()
-        h, w, _ = img_working.shape
-
-        # Cắt chính giữa bức ảnh dựa trên tỷ lệ mục tiêu
-        if w / h > target_ratio:
-            crop_h = h
-            crop_w = int(h * target_ratio)
-            left_x = (w - crop_w) // 2
-            top_y = 0
+        
+        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
+            result = detect_face_mediapipe(img_working)
+            if result[0] is None: return None, "Không tìm thấy khuôn mặt (MediaPipe)", 0
+            face_rect, auto_angle = result
+            (x, y, w, h) = face_rect
         else:
-            crop_w = w
-            crop_h = int(w / target_ratio)
-            left_x = 0
-            top_y = (h - crop_h) // 2
+            gray = cv2.cvtColor(img_working, cv2.COLOR_BGRA2GRAY)
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+            if len(faces) == 0: return None, "Không tìm thấy khuôn mặt (Haarcascade)", 0
+            face_rect = max(faces, key=lambda f: f[2] * f[3])
+            auto_angle = get_face_angle(gray, face_rect)
+            (x, y, w, h) = face_rect
 
-        img_pil = Image.fromarray(cv2.cvtColor(img_working, cv2.COLOR_BGRA2RGBA))
+        if abs(auto_angle) < 1.0 or abs(auto_angle) > 20.0: auto_angle = 0.0 
+
+        total_angle = auto_angle + manual_angle
+        img_rotated = rotate_image(img_working, total_angle) if abs(total_angle) > 0.1 else img_working
+
+        if detector_type == "MediaPipe" and HAS_MEDIAPIPE:
+            result_new = detect_face_mediapipe(img_rotated)
+            if result_new[0] is not None:
+                (x, y, w, h) = result_new[0]
+        else:
+            gray_new = cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2GRAY)
+            faces_new = face_cascade.detectMultiScale(gray_new, 1.1, 5)
+            if len(faces_new) > 0:
+                (x, y, w, h) = max(faces_new, key=lambda f: f[2] * f[3])
+
+        if target_ratio == 1.0: 
+            zoom_factor = 1.8  
+            top_offset = 0.55 
+        elif 0.77 <= target_ratio <= 0.78: 
+            zoom_factor = 1.7  
+            top_offset = 0.50 
+        elif 0.68 <= target_ratio <= 0.69: 
+            zoom_factor = 1.75 
+            top_offset = 0.50  
+        elif target_ratio < 0.7: 
+            zoom_factor = 2.0  
+            top_offset = 0.45   
+        else: 
+            zoom_factor = 2.2
+            top_offset = 0.5
+
+        crop_h = int(h * zoom_factor) 
+        crop_w = int(crop_h * target_ratio)
+        
+        face_center_x = x + w // 2
+        top_y = int(y - (h * top_offset)) 
+        left_x = int(face_center_x - crop_w // 2)
+
+        img_pil = Image.fromarray(cv2.cvtColor(img_rotated, cv2.COLOR_BGRA2RGBA))
         canvas = Image.new("RGBA", (crop_w, crop_h), (0,0,0,0))
         canvas.paste(img_pil, (-left_x, -top_y), img_pil)
-        return canvas
+        return canvas, f"Góc Auto ({detector_type}): {auto_angle:.1f}°", total_angle
     except Exception as e:
-        return None
+        return None, str(e), 0
 
 def apply_transform(image, zoom=1.0, move_x=0, move_y=0):
     if zoom == 1.0 and move_x == 0 and move_y == 0: return image
@@ -379,7 +487,7 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (THU HẸP KHOẢNG CÁCH & BỎ CROP MARKS)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     st.info("IN ẢNH PRO")
@@ -824,7 +932,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
 
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ STUDIO XỬ LÝ (ĐÃ LƯỢC BỎ AI NHẬN DIỆN KHUÔN MẶT)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ STUDIO XỬ LÝ (GIỮ NGUYÊN HOÀN HẢO LOGIC CŨ)
 # ==============================================================================
 
 with st.sidebar:
@@ -837,6 +945,15 @@ with st.sidebar:
         input_file = st.file_uploader("Chọn file (JPG, PNG)", type=['jpg', 'png', 'jpeg'])
     else:
         input_file = st.camera_input("Chụp ảnh ngay")
+
+    st.markdown("---")
+    st.subheader("🤖 Công nghệ AI Nhận diện")
+    if HAS_MEDIAPIPE:
+        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
+        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+    else:
+        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
+        detector_type = "Haarcascade"
 
     st.markdown("---")
     st.subheader("Kích thước & Phông nền")
@@ -864,7 +981,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V3.2.0 - Loại bỏ bộ máy AI theo yêu cầu")
+    st.caption("Phiên bản V3.1.2 - Tối ưu khoảng cách sát biên")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -897,9 +1014,11 @@ col_tools, col_result = st.columns([1, 1.2])
 with col_tools:
     st.subheader("🎛️ Bảng điều khiển")
     
+    manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     if 'raw_nobg' in st.session_state:
-        # Thay thế hàm crop AI bằng hàm crop chính giữa khuôn hình theo tỷ lệ chuẩn
-        st.session_state.base = crop_final_image_center(st.session_state.raw_nobg, target_ratio)
+        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio, detector_type)
+        if final_crop: st.session_state.base = final_crop
+        else: st.error(f"Lỗi: {debug_info}")
 
     tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
     
