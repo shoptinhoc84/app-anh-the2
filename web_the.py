@@ -203,6 +203,7 @@ def process_raw_to_nobg(file_input):
     image = resize_image_input(image, max_height=1200)
     session = get_rembg_session()
     
+    # Đã giảm alpha_matting_erode_size xuống 2 để tránh cắt sâu vào áo
     no_bg_pil = remove(
         image, 
         session=session, 
@@ -212,8 +213,10 @@ def process_raw_to_nobg(file_input):
         alpha_matting_erode_size=2 
     )
     
+    # Chuyển đổi sang định dạng OpenCV BGRA
     no_bg_cv = cv2.cvtColor(np.array(no_bg_pil), cv2.COLOR_RGBA2BGRA)
     
+    # Khử lớp mờ GaussianBlur gây lem viền, sử dụng Threshold để viền sắc nét hơn
     b, g, r, alpha = cv2.split(no_bg_cv)
     _, alpha_sharp = cv2.threshold(alpha, 200, 255, cv2.THRESH_BINARY)
     no_bg_cv = cv2.merge([b, g, r, alpha_sharp])
@@ -484,7 +487,7 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ FIX LỖI NHUỘM XANH DA MẶT)
+# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (THU HẸP KHOẢNG CÁCH & BỎ CROP MARKS)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     st.info("IN ẢNH PRO")
@@ -508,18 +511,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
             }
             h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
             
-            .global-settings {
-                background: #f8f9fa; border: 1px solid #e2e8f0; padding: 15px; 
-                border-radius: 12px; margin-bottom: 25px; display: flex; 
-                justify-content: center; align-items: center; gap: 15px;
-            }
-            .global-settings label { font-weight: bold; color: #4a5568; font-size: 15px;}
-            .global-settings select {
-                padding: 8px 16px; border-radius: 8px; border: 2px solid #cbd5e0;
-                font-weight: bold; outline: none; background: white; cursor: pointer; color: #2d3748;
-            }
-            .global-settings select:focus { border-color: #4287f5; }
-
             .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px;}
             .person-box { 
                 flex: 1; border: 2px dashed #b8c2cc; padding: 15px 10px; border-radius: 14px; 
@@ -594,14 +585,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
         <div class="container">
             <h2>HỆ THỐNG XẾP IN HỒ SƠ CAO CẤP SHOPTINHOC</h2>
             
-            <div class="global-settings">
-                <label for="backgroundColorSelect">🎨 Chọn Màu Nền In Tất Cả Ảnh:</label>
-                <select id="backgroundColorSelect">
-                    <option value="WHITE" selected>Giữ nguyên nền gốc ảnh tải lên</option>
-                    <option value="BLUE">Chuyển sang nền Xanh Chuẩn (123.jpg)</option>
-                </select>
-            </div>
-
             <div class="upload-group">
                 <div class="person-box">
                     <h4>👤 Người thứ 1</h4>
@@ -788,86 +771,6 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return list;
             }
 
-            // THUẬT TOÁN FLOOD-FILL THÔNG MINH: CHỈ LOANG MÀU TỪ RÌA ẢNH VÀO TRONG, KHÔNG CHẠM VÀO DA MẶT
-            function floodFillToBlueBackground(base64Str, callback) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    
-                    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const data = imgData.data;
-                    const width = canvas.width;
-                    const height = canvas.height;
-                    
-                    // Lấy thông tin màu phông nền mẫu tại điểm góc trên cùng bên trái (0, 0)
-                    const targetR = data[0];
-                    const targetG = data[1];
-                    const targetB = data[2];
-                    
-                    // Nếu ảnh vốn đã là ảnh nền xanh hoặc màu quá tối thì không chạy thuật toán loang màu
-                    if (targetB > targetR + 20 && targetB > 100) {
-                        callback(base64Str);
-                        return;
-                    }
-
-                    const visited = new Uint8Array(width * height);
-                    // Hàng đợi lưu các điểm pixel cần loang màu (Queue)
-                    const queue = [];
-                    
-                    // Đưa toàn bộ các pixel dọc theo 4 cạnh rìa của ảnh thẻ vào hàng đợi xuất phát
-                    for (let x = 0; x < width; x++) {
-                        queue.push([x, 0]); queue.push([x, height - 1]);
-                        visited[x] = 1; visited[(height - 1) * width + x] = 1;
-                    }
-                    for (let y = 1; y < height - 1; y++) {
-                        queue.push([0, y]); queue.push([width - 1, y]);
-                        visited[y * width] = 1; visited[y * width + (width - 1)] = 1;
-                    }
-                    
-                    // Sai số cho phép khi nhận diện màu phông nền (nhận diện cả bóng mờ)
-                    const tolerance = 45; 
-                    
-                    while (queue.length > 0) {
-                        const [cx, cy] = queue.shift();
-                        const idx = (cy * width + cx) * 4;
-                        
-                        let r = data[idx];
-                        let g = data[idx+1];
-                        let b = data[idx+2];
-                        
-                        // Tính khoảng cách màu so với góc ảnh ban đầu
-                        let diff = Math.sqrt((r-targetR)*(r-targetR) + (g-targetG)*(g-targetG) + (b-targetB)*(b-targetB));
-                        
-                        // Nếu thỏa mãn điều kiện là phông nền thì nhuộm màu xanh chuẩn
-                        if (diff <= tolerance || (r > 200 && g > 200 && b > 200)) {
-                            data[idx] = 66;     // Màu xanh chuẩn R
-                            data[idx+1] = 133;  // Màu xanh chuẩn G
-                            data[idx+2] = 245;  // Màu xanh chuẩn B
-                            
-                            // Kiểm tra loang tiếp sang 4 pixel lân cận xung quanh (Trên, Dưới, Trái, Phải)
-                            const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
-                            for (const [nx, ny] of neighbors) {
-                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                    const nIdx = ny * width + nx;
-                                    if (visited[nIdx] === 0) {
-                                        visited[nIdx] = 1;
-                                        queue.push([nx, ny]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    ctx.putImageData(imgData, 0, 0);
-                    callback(canvas.toDataURL('image/jpeg', 1.0));
-                };
-                img.src = base64Str;
-            }
-
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
                 let gapX = 1.5, gapY = 2; 
@@ -911,8 +814,8 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                             }
 
                             currentPage.push({
-                                data: person.processedData ? person.processedData : person.data,
-                                type: 'JPEG',
+                                data: person.data,
+                                type: person.type,
                                 x: curX,
                                 y: curY,
                                 w: imgW,
@@ -943,52 +846,32 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 let persons = getPersonsData();
                 if (persons.length === 0) return alert("Vui lòng tải ảnh lên và nhập số lượng!");
 
-                const bgMode = document.getElementById('backgroundColorSelect').value;
-                let processedCount = 0;
-                
-                function runRender() {
-                    let pages = buildLayoutData(persons);
-                    let pagesHtml = '';
+                let pages = buildLayoutData(persons);
+                let pagesHtml = '';
 
-                    pages.forEach(page => {
-                        pagesHtml += `<div class="a4-page-preview" style="aspect-ratio: 210/297; border: 1px solid #777; background:#fff; margin-bottom:20px; position:relative;">`;
-                        page.forEach(img => {
-                            let pLeft = (img.x / 210) * 100 + '%';
-                            let pTop = (img.y / 297) * 100 + '%';
-                            let pWidth = (img.w / 210) * 100 + '%';
-                            let pHeight = (img.h / 297) * 100 + '%';
+                pages.forEach(page => {
+                    pagesHtml += `<div class="a4-page-preview" style="aspect-ratio: 210/297; border: 1px solid #777; background:#fff; margin-bottom:20px; position:relative;">`;
+                    page.forEach(img => {
+                        let pLeft = (img.x / 210) * 100 + '%';
+                        let pTop = (img.y / 297) * 100 + '%';
+                        let pWidth = (img.w / 210) * 100 + '%';
+                        let pHeight = (img.h / 297) * 100 + '%';
 
-                            pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
+                        pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
 
-                            if (img.name) {
-                                let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
-                                let labelFontSize = (img.w === 30) ? '8px' : '9px';
-                                pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.8); height:13px; line-height:13px;">${img.name}</div>`;
-                            }
-                        });
-                        pagesHtml += `</div>`;
+                        if (img.name) {
+                            let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
+                            let labelFontSize = (img.w === 30) ? '8px' : '9px';
+                            pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.8); height:13px; line-height:13px;">${img.name}</div>`;
+                        }
                     });
+                    pagesHtml += `</div>`;
+                });
 
-                    document.getElementById('pdfIframeContainer').innerHTML = pagesHtml;
-                    document.getElementById('previewContainer').style.display = 'block';
-                    document.getElementById('downloadBtn').style.display = 'inline-block';
-                    document.getElementById('directPrintBtn').style.display = 'inline-block';
-                }
-
-                if (bgMode === "BLUE") {
-                    persons.forEach((p) => {
-                        floodFillToBlueBackground(p.data, function(newBase64) {
-                            p.processedData = newBase64;
-                            processedCount++;
-                            if (processedCount === persons.length) {
-                                runRender();
-                            }
-                        });
-                    });
-                } else {
-                    persons.forEach(p => p.processedData = null);
-                    runRender();
-                }
+                document.getElementById('pdfIframeContainer').innerHTML = pagesHtml;
+                document.getElementById('previewContainer').style.display = 'block';
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+                document.getElementById('directPrintBtn').style.display = 'inline-block';
             });
 
             function generateJsPDFObject() {
@@ -1044,7 +927,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     </body>
     </html>
     """
-    components.html(html_code, height=2050, scrolling=True)
+    components.html(html_code, height=1950, scrolling=True)
     st.stop()
 
 
