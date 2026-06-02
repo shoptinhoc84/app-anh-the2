@@ -369,7 +369,7 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# HOẠT ĐỘNG KHI CHỌN CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ TÍCH HỢP TÁCH NỀN TRẮNG SANG XANH)
+# CHẾ ĐỘ GHÉP SỐ LƯỢNG LỚN (ĐÃ SỬA TRIỆT ĐỂ LỖI LEM MÀU VÀO MẶT VÀ ÁO TRẮNG)
 # ==============================================================================
 if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
     st.info("IN ẢNH PRO")
@@ -483,7 +483,7 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 <label for="backgroundColorSelect">🎨 Chọn màu nền in tất cả ảnh:</label>
                 <select id="backgroundColorSelect">
                     <option value="WHITE" selected>Giữ nguyên nền gốc ảnh khách tải lên</option>
-                    <option value="BLUE">Tự động tách nền trắng ➔ Nền Xanh Chuẩn (123.jpg)</option>
+                    <option value="BLUE">Tách nền trắng ➔ Nền Xanh Chuẩn chính xác (123.jpg)</option>
                 </select>
             </div>
 
@@ -673,8 +673,8 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                 return list;
             }
 
-            // THUẬT TOÁN TÁCH NỀN TRẮNG CHUYÊN NGHIỆP: CHỈ LOANG VÙNG RÌA, KHÔNG CHẠM VÀO NGƯỜI
-            function smartChangeToBlueBackground(base64Str, callback) {
+            // THUẬT TOÁN KÉP: CHỈ THAY THẾ VÙNG BIÊN NGOÀI CÙNG & BẢO VỆ LỚP TRUNG TÂM (MẶT/MŨI/ÁO) KHÔNG BỊ LEM
+            function advancedMaskingToBlueBackground(base64Str, callback) {
                 const img = new Image();
                 img.onload = function() {
                     const canvas = document.createElement('canvas');
@@ -685,58 +685,50 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     
                     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     const data = imgData.data;
-                    const width = canvas.width;
-                    const height = canvas.height;
+                    const w = canvas.width;
+                    const h = canvas.height;
                     
-                    // Lấy màu mẫu ở góc (0,0) làm chuẩn nền ban đầu
-                    const startR = data[0];
-                    const startG = data[1];
-                    const startB = data[2];
-                    
-                    // Khởi tạo mảng đánh dấu điểm đã quét qua
-                    const visited = new Uint8Array(width * height);
-                    const queue = [];
-                    
-                    // Đưa toàn bộ 4 hàng rìa của ảnh thẻ vào hàng đợi Flood Fill ban đầu
-                    for (let x = 0; x < width; x++) {
-                        queue.push([x, 0]); queue.push([x, height - 1]);
-                        visited[x] = 1; visited[(height - 1) * width + x] = 1;
-                    }
-                    for (let y = 1; y < height - 1; y++) {
-                        queue.push([0, y]); queue.push([width - 1, y]);
-                        visited[y * width] = 1; visited[y * width + (width - 1)] = 1;
-                    }
-                    
-                    // Ngưỡng dung sai nhận diện màu trắng/sáng của phông cũ
-                    const tolerance = 48;
-                    
-                    while (queue.length > 0) {
-                        const [cx, cy] = queue.shift();
-                        const idx = (cy * width + cx) * 4;
-                        
-                        let r = data[idx];
-                        let g = data[idx+1];
-                        let b = data[idx+2];
-                        
-                        // Tính toán độ lệch màu của pixel hiện tại so với màu rìa nền cũ
-                        let diff = Math.sqrt((r-startR)*(r-startR) + (g-startG)*(g-startG) + (b-startB)*(b-startB));
-                        
-                        // Nếu thỏa mãn điều kiện phông sáng mờ hoặc trắng hoàn toàn
-                        if (diff <= tolerance || (r > 160 && g > 160 && b > 160)) {
-                            // Thay thế trực tiếp thành màu xanh chuẩn: rgb(66, 133, 245)
-                            data[idx] = 66;
-                            data[idx+1] = 133;
-                            data[idx+2] = 245;
+                    // Xác định màu mẫu phông trắng ở 4 góc rìa ngoài cùng bức ảnh
+                    const targetR = (data[0] + data[(w-1)*4] + data[(h-1)*w*4]) / 3;
+                    const targetG = (data[1] + data[(w-1)*4+1] + data[(h-1)*w*4+1]) / 3;
+                    const targetB = (data[2] + data[(w-1)*4+2] + data[(h-1)*w*4+2]) / 3;
+
+                    // Giới hạn khu vực an toàn (Vùng lõi chứa Đầu/Mặt/Áo học viên nằm giữa hình)
+                    // Trục X an toàn: Từ 20% đến 80% chiều rộng hình.
+                    // Trục Y an toàn: Từ 15% đến 90% chiều cao hình.
+                    const safeLeft = Math.floor(w * 0.20);
+                    const safeRight = Math.floor(w * 0.80);
+                    const safeTop = Math.floor(h * 0.15);
+                    const safeBottom = Math.floor(h * 0.90);
+
+                    for (let cy = 0; cy < h; cy++) {
+                        for (let cx = 0; cx < w; cx++) {
+                            const idx = (cy * w + cx) * 4;
+                            let r = data[idx];
+                            let g = data[idx+1];
+                            let b = data[idx+2];
+
+                            // Tính khoảng cách lệch màu
+                            let colorDiff = Math.sqrt((r-targetR)*(r-targetR) + (g-targetG)*(g-targetG) + (b-targetB)*(b-targetB));
                             
-                            // Loang sang 4 phía xung quanh điểm hiện tại
-                            const neighbors = [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]];
-                            for (const [nx, ny] of neighbors) {
-                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                    const nIdx = ny * width + nx;
-                                    if (visited[nIdx] === 0) {
-                                        visited[nIdx] = 1;
-                                        queue.push([nx, ny]);
-                                    }
+                            // KIỂM TRA ĐIỀU KIỆN BIÊN: 
+                            // Nếu nằm ngoài vùng lõi an toàn, hoặc màu sắc trùng với màu phông trắng rìa ảnh
+                            let isOutsideCore = (cx < safeLeft || cx > safeRight || cy < safeTop || cy > safeBottom);
+                            
+                            if (isOutsideCore) {
+                                // Ở vùng ngoài rìa ảnh: Nhận diện phông lỏng hơn để dọn sạch bóng mờ
+                                if (colorDiff < 75 || (r > 135 && g > 135 && b > 135)) {
+                                    data[idx] = 66;     // Đổi sang màu xanh chuẩn 123.jpg
+                                    data[idx+1] = 133;
+                                    data[idx+2] = 245;
+                                }
+                            } else {
+                                // Ở TRONG VÙNG LÕI (Mặt, mũi, áo trắng): Chỉ đổi màu nếu là nền trắng tinh tuyệt đối (>235)
+                                // Tránh hoàn toàn việc lem màu vào sắc độ da người hay bóng đổ mờ trên áo trắng
+                                if (r > 235 && g > 235 && b > 235 && colorDiff < 25) {
+                                    data[idx] = 66;
+                                    data[idx+1] = 133;
+                                    data[idx+2] = 245;
                                 }
                             }
                         }
@@ -855,10 +847,9 @@ if app_mode == "👥 Tool Ghép In A4 (Số lượng lớn)":
                     document.getElementById('directPrintBtn').style.display = 'inline-block';
                 }
 
-                // Nếu bật chế độ màu BLUE, xử lý hoán đổi phông rìa trắng sang xanh trước khi dàn layout
                 if (bgMode === "BLUE") {
                     persons.forEach((p) => {
-                        smartChangeToBlueBackground(p.data, function(newBase64) {
+                        advancedMaskingToBlueBackground(p.data, function(newBase64) {
                             p.processedData = newBase64;
                             processedCount++;
                             if (processedCount === persons.length) {
@@ -943,6 +934,15 @@ with st.sidebar:
         input_file = st.camera_input("Chụp ảnh ngay")
 
     st.markdown("---")
+    st.subheader("🤖 Công nghệ AI Nhận diện")
+    if HAS_MEDIAPIPE:
+        detector_option = st.radio("Chọn bộ máy:", ["MediaPipe (Chuẩn xác, Nhanh)", "Haarcascade (Dự phòng)"], horizontal=True)
+        detector_type = "MediaPipe" if "MediaPipe" in detector_option else "Haarcascade"
+    else:
+        st.warning("⚠️ Máy chủ không tải được MediaPipe. Đang dùng Haarcascade mặc định.")
+        detector_type = "Haarcascade"
+
+    st.markdown("---")
     st.subheader("Kích thước & Phông nền")
     
     size_option = st.radio("Chọn cỡ ảnh:", 
@@ -968,7 +968,7 @@ with st.sidebar:
     bg_val = bg_map.get(bg_name)
     
     st.markdown("---")
-    st.caption("Phiên bản V3.2.1 - Tách nền Frontend siêu tốc")
+    st.caption("Phiên bản V3.2.5 - Khóa vùng an toàn thông minh")
 
 # --- XỬ LÝ ẢNH ĐẦU VÀO ---
 if input_file:
@@ -999,8 +999,12 @@ col_tools, col_result = st.columns([1, 1.2])
 
 with col_tools:
     st.subheader("🎛️ Bảng điều khiển")
+    
+    manual_rot = st.slider("Góc nghiêng đầu:", -15.0, 15.0, 0.0, 0.5)
     if 'raw_nobg' in st.session_state:
-        st.session_state.base = crop_final_image_center(st.session_state.raw_nobg, target_ratio)
+        final_crop, debug_info, _ = crop_final_image(st.session_state.raw_nobg, manual_rot, target_ratio, detector_type)
+        if final_crop: st.session_state.base = final_crop
+        else: st.error(f"Lỗi: {debug_info}")
 
     tab1, tab2, tab3 = st.tabs(["🎨 Màu & Ánh sáng", "👩 Khuôn mặt", "📐 Bố cục & Nét"])
     with tab1:
