@@ -506,10 +506,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# CHẾ ĐỘ SỐ LƯỢNG LỚN (ĐÃ TỐI ƯU KHOẢNG CÁCH SÁT NHAU THEO YÊU CẦU)
+# CHẾ ĐỘ SỐ LƯỢNG LỚN (KHOẢNG CÁCH ẢNH ĐƯỢC THU GỌN XUỐNG CÒN CỐ ĐỊNH 0.6MM)
 # ==============================================================================
 if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
-    st.info("⚙️ Giao diện module xử lý hồ sơ hàng loạt - Khoảng cách ảnh được tối ưu sát nhau (0.8mm)")
+    st.info("⚙️ Giao diện module xử lý hồ sơ hàng loạt - Khoảng cách ảnh siêu sát (0.6mm)")
     
     html_code = """
     <!DOCTYPE html>
@@ -720,8 +720,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
 
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
-                // THAY ĐỔI: Giảm khoảng cách gapX, gapY xuống 0.8mm để các ảnh gần sát lại nhau
-                let gapX = 0.8, gapY = 0.8, marginX = 10, marginY = 15;
+                // THAY ĐỔI: Hạ khoảng cách ngang (gapX) và dọc (gapY) xuống đúng 0.6mm theo yêu cầu
+                let gapX = 0.6, gapY = 0.6, marginX = 10, marginY = 15;
                 let pages = [], currentPage = [], curX = marginX, curY = marginY, lastRowHeight = 0;
 
                 persons.forEach((person) => {
@@ -918,8 +918,8 @@ with col_tools:
         p_contrast = st.slider("Độ tương phản ảnh", 0.5, 1.5, st.session_state.get('val_contrast', 1.0), 0.05, key="val_contrast")
         p_temp = st.slider("Nhiệt độ màu (Ấm/Lạnh)", -50, 50, st.session_state.get('val_temp', 0), key="val_temp")
         col_b, col_w = st.columns(2)
-        with col_b: p_blacks = st.slider("Vùng Tối (Blacks)", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
-        with col_w: p_whites = st.slider("Vùng Sáng (Whites)", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
+        with col_b: p_blacks = st.slider("Màu Đen (Blacks)", 0, 50, st.session_state.get('val_blacks', 0), key="val_blacks")
+        with col_w: p_whites = st.slider("Màu Trắng (Whites)", 0, 50, st.session_state.get('val_whites', 0), key="val_whites")
 
     with tab2:
         p_smooth = st.slider("Mịn da kỹ thuật số", 0, 30, st.session_state.get('val_smooth', 0), key="val_smooth")
