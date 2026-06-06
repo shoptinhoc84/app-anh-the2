@@ -130,7 +130,7 @@ st.markdown("""
 def get_rembg_session():
     return new_session("u2netp")
 
-# --- 2. LOGIC HÀM XỬ LÝ (GIỮ NGUYÊN HOÀN HẢO LOGIC GỐC CỦA BẠN) ---
+# --- 2. LOGIC HÀM XỬ LÝ ---
 def reset_beauty_params():
     st.session_state.val_smooth = 0
     st.session_state.val_makeup = 0
@@ -505,10 +505,12 @@ with st.sidebar:
     ])
     st.markdown("---")
 
-# CHẾ ĐỘ SỐ LƯỢNG LỚN (GIỮ NGUYÊN BLOCK GỐC CHỈ SỬA TEXT CHO SANG TRỌNG)
+# ==============================================================================
+# CHẾ ĐỘ SỐ LƯỢNG LỚN (ĐÃ TỐI ƯU KHOẢNG CÁCH SÁT NHAU THEO YÊU CẦU)
+# ==============================================================================
 if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
-    st.info("⚙️ Giao diện module xử lý hồ sơ hàng loạt")
-    # Giữ nguyên toàn bộ mã HTML/JS của bạn bên dưới
+    st.info("⚙️ Giao diện module xử lý hồ sơ hàng loạt - Khoảng cách ảnh được tối ưu sát nhau (0.8mm)")
+    
     html_code = """
     <!DOCTYPE html>
     <html lang="vi">
@@ -718,7 +720,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
 
             function buildLayoutData(persons) {
                 const a4W = 210, a4H = 297;
-                let gapX = 1.5, gapY = 2, marginX = 10, marginY = 15;
+                // THAY ĐỔI: Giảm khoảng cách gapX, gapY xuống 0.8mm để các ảnh gần sát lại nhau
+                let gapX = 0.8, gapY = 0.8, marginX = 10, marginY = 15;
                 let pages = [], currentPage = [], curX = marginX, curY = marginY, lastRowHeight = 0;
 
                 persons.forEach((person) => {
@@ -936,7 +939,7 @@ with col_tools:
         p_clarity = st.slider("Độ rõ nét khối (Clarity)", 0, 50, st.session_state.get('val_clarity', 0), key="val_clarity")
         p_denoise = st.slider("Khử hạt hạt nhiễu (Denoise)", 0, 20, st.session_state.get('val_denoise', 0), key="val_denoise")
         p_dehaze = st.slider("Khử sương mờ", 0, 30, st.session_state.get('val_dehaze', 0), key="val_dehaze")
-        p_edge_soft = st.slider("Làm mịn đường biên cắt", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
+        p_edge_soft = st.slider("Làm mềm biên đúng chuẩn", 0, 10, st.session_state.get('val_edge_soft', 0), key="val_edge_soft")
 
     params = {
         'smooth': p_smooth, 'makeup': p_makeup, 'exposure': p_exposure, 'contrast': p_contrast, 'temp': p_temp,
@@ -995,4 +998,4 @@ with col_result:
             with c_after: st.image(final_rgb, caption="Sản phẩm hoàn thiện")
     else:
         st.info("👈 Vui lòng lựa chọn hoặc chụp ảnh từ bảng điều khiển bên trái để bắt đầu.")
-        st.center = st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
+        st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
