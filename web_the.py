@@ -762,7 +762,11 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
 
         function buildLayoutData(persons) {
             const a4W = 210, a4H = 297;
-            let gapX = 0.6, gapY = 0.6, marginX = 10, marginY = 15;
+            
+            // --- THIẾT LẬP ÉP LỀ MỚI ---
+            // marginX (lề ngang) rút từ 10 xuống 5, marginY (lề trên/dưới) rút từ 15 xuống 3
+            let gapX = 0.6, gapY = 0.6, marginX = 5, marginY = 3;
+            
             let pages = [], currentPage = [], curX = marginX, curY = marginY;
             let maxRowHeight = 0;
 
@@ -777,12 +781,14 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             });
 
             allItems.forEach((item) => {
+                // Kiểm tra xem hình ảnh tiếp theo có vượt ra khỏi mép lề phải của giấy A4 không
                 if (curX + item.w > a4W - marginX) {
                     curX = marginX;
                     curY += maxRowHeight + gapY;
                     maxRowHeight = 0;
                 }
 
+                // Kiểm tra xem hình ảnh tiếp theo có vượt ra khỏi mép lề dưới của giấy A4 không
                 if (curY + item.h > a4H - marginY) {
                     pages.push(currentPage);
                     currentPage = [];
