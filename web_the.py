@@ -424,7 +424,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge((h_c, s_c, v_c)), cv2.COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -566,7 +566,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; 
             font-weight: bold; cursor: pointer; display: none; align-items: center; justify-content: center;
         }
-        .btn-group { display: flex; gap: 12px; justify-content: center; margin-top: 30px;}
+        .btn-group { display: flex; gap: 12px; justify-content: center; margin-bottom: 25px;}
         .btn { 
             border-radius: 50px; padding: 15px 20px; font-size: 14px; font-weight: 700; 
             text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; color: white; border: none; 
@@ -592,6 +592,13 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
 <body>
     <div class="container">
         <h2>HỆ THỐNG XẾP IN HỒ SƠ CAO CẤP SMART STUDIO</h2>
+
+        <!-- ĐƯA CỤM NÚT LÊN ĐẦU DỄ THAO TÁC -->
+        <div class="btn-group">
+            <button id="previewBtn" class="btn">👁️ Xem Trước Bản Xếp</button>
+            <button id="downloadBtn" class="btn">⬇️ Tải Xuống PDF</button>
+            <button id="directPrintBtn" class="btn">🖨️ Tiến Hành In</button>
+        </div>
         
         <!-- Hàng 1: Người 1 & 2 -->
         <div class="upload-group">
@@ -602,7 +609,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview1" class="preview" alt="Preview 1"><button id="clearBtn1" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_1" value="9" min="0" max="24"></div>
+                    <!-- ĐÃ ĐỔI GIÁ TRỊ MẶC ĐỊNH CỦA NGƯỜI 1 THÀNH 8 -->
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_1" value="8" min="0" max="24"></div>
                     <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_1" value="0" min="0" max="24"></div>
                 </div>
             </div>
@@ -671,11 +679,6 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             </div>
         </div>
 
-        <div class="btn-group">
-            <button id="previewBtn" class="btn">👁️ Xem Trước Bản Xếp</button>
-            <button id="downloadBtn" class="btn">⬇️ Tải Xuống PDF</button>
-            <button id="directPrintBtn" class="btn">🖨️ Tiến Hành In</button>
-        </div>
         <div id="previewContainer">
             <h4>📄 MÔ PHỎNG TRANG IN CHUẨN A4</h4>
             <div id="pdfIframeContainer"></div>
@@ -764,7 +767,6 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             const a4W = 210, a4H = 297;
             
             // --- THIẾT LẬP ÉP LỀ MỚI ---
-            // marginX (lề ngang) rút từ 10 xuống 5, marginY (lề trên/dưới) rút từ 15 xuống 3
             let gapX = 0.6, gapY = 0.6, marginX = 5, marginY = 3;
             
             let pages = [], currentPage = [], curX = marginX, curY = marginY;
@@ -781,14 +783,12 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             });
 
             allItems.forEach((item) => {
-                // Kiểm tra xem hình ảnh tiếp theo có vượt ra khỏi mép lề phải của giấy A4 không
                 if (curX + item.w > a4W - marginX) {
                     curX = marginX;
                     curY += maxRowHeight + gapY;
                     maxRowHeight = 0;
                 }
 
-                // Kiểm tra xem hình ảnh tiếp theo có vượt ra khỏi mép lề dưới của giấy A4 không
                 if (curY + item.h > a4H - marginY) {
                     pages.push(currentPage);
                     currentPage = [];
