@@ -506,7 +506,7 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# CHẾ ĐỘ SỐ LƯỢNG LỚN (HỖ TRỢ 10 NGƯỜI, KHOẢNG CÁCH ẢNH 0.6MM)
+# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - KHÔNG KHOẢNG TRẮNG)
 # ==============================================================================
 if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
     st.info("⚙️ Giao diện module xử lý hồ sơ hàng loạt (10 người) - Khoảng cách ảnh siêu sát (0.6mm)")
@@ -520,29 +520,30 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
-            display: flex; justify-content: center; align-items: center; 
-            min-height: 100vh; margin: 0; padding: 20px;
+            display: flex; justify-content: center; align-items: flex-start; 
+            min-height: auto; margin: 0; padding: 10px 0;
         }
         .container { 
-            background: #ffffff; padding: 35px; border-radius: 20px; 
+            background: #ffffff; padding: 25px 35px; border-radius: 20px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 850px; width: 100%; text-align: center;
+            margin-top: 0;
         }
-        h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 25px; margin-top: 0;}
-        .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px;}
+        h2 { color: #2c3e50; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; margin-top: 0;}
+        .upload-group { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 15px;}
         .person-box { 
-            flex: 1; border: 2px dashed #b8c2cc; padding: 15px 10px; border-radius: 14px; 
+            flex: 1; border: 2px dashed #b8c2cc; padding: 12px 10px; border-radius: 14px; 
             background: #fafafa; transition: all 0.3s ease; position: relative; text-align: center;
         }
         .person-box:hover { border-color: #007bff; background: #f0f7ff;}
-        .person-box h4 { margin: 0 0 10px 0; color: #0056b3; font-size: 15px; font-weight: 700;}
+        .person-box h4 { margin: 0 0 8px 0; color: #0056b3; font-size: 15px; font-weight: 700;}
         .name-input {
-            width: 85%; padding: 6px 10px; margin: 8px auto; border: 1px solid #ced4da;
+            width: 85%; padding: 6px 10px; margin: 6px auto; border: 1px solid #ced4da;
             border-radius: 6px; font-size: 13px; outline: none; text-align: center; display: block;
         }
         .name-input:focus { border-color: #007bff; box-shadow: 0 0 4px rgba(0,123,255,0.2); }
         .qty-area {
-            margin-top: 10px; background: #eee; padding: 10px; border-radius: 8px;
-            display: flex; flex-direction: column; gap: 8px;
+            margin-top: 8px; background: #eee; padding: 8px; border-radius: 8px;
+            display: flex; flex-direction: column; gap: 6px;
         }
         .qty-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold; color: #444;}
         .qty-row input { width: 50px; text-align: center; padding: 4px; border-radius: 4px; border: 1px solid #ccc; font-weight: bold;}
@@ -556,7 +557,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             border: 1px solid #e2e8f0; width: 85%; margin: 0 auto;
         }
         .custom-file-upload:hover { background-color: #e2e8f0; }
-        .img-wrapper { position: relative; display: inline-block; margin-top: 10px; }
+        .img-wrapper { position: relative; display: inline-block; margin-top: 8px; }
         .preview { 
             max-width: 80px; max-height: 100px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); 
             border: 2px solid #fff; display: none; object-fit: cover;
@@ -566,16 +567,16 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; 
             font-weight: bold; cursor: pointer; display: none; align-items: center; justify-content: center;
         }
-        .btn-group { display: flex; gap: 12px; justify-content: center; margin-top: 30px;}
+        .btn-group { display: flex; gap: 12px; justify-content: center; margin-top: 25px;}
         .btn { 
-            border-radius: 50px; padding: 15px 20px; font-size: 14px; font-weight: 700; 
+            border-radius: 50px; padding: 14px 20px; font-size: 14px; font-weight: 700; 
             text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; color: white; border: none; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.1); transition: all 0.3s ease; flex: 1; 
         }
         #previewBtn { background: linear-gradient(135deg, #36D1DC 0%, #5B86E5 100%); }
         #downloadBtn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); display: none; }
         #directPrintBtn { background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%); display: none; }
-        #previewContainer { display: none; margin-top: 35px; border-top: 2px dashed #e2e8f0; padding-top: 25px; }
+        #previewContainer { display: none; margin-top: 30px; border-top: 2px dashed #e2e8f0; padding-top: 20px; }
         #previewContainer h4 { color: #4a5568; margin-bottom: 20px; font-weight: 700;}
         .a4-page-preview {
             position: relative; width: 100%; max-width: 480px; background: white; 
@@ -789,10 +790,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
 
         function buildLayoutData(persons) {
             const a4W = 210, a4H = 297;
-            
-            // --- THIẾT LẬP ÉP LỀ MỚI ---
             let gapX = 0.6, gapY = 0.6, marginX = 5, marginY = 3;
-            
             let pages = [], currentPage = [], curX = marginX, curY = marginY;
             let maxRowHeight = 0;
 
@@ -892,7 +890,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
     </script>
 </body>
 </html>"""
-    components.html(html_code, height=3100, scrolling=True)
+    components.html(html_code, height=1850, scrolling=True)
     st.stop()
 
 # ==============================================================================
