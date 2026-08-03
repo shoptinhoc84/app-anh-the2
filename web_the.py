@@ -506,10 +506,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - KHÔNG KHOẢNG TRẮNG)
+# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - SÁT LỀ TỐI ĐA 7 ẢNH/HÀNG)
 # ==============================================================================
 if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
-    st.info("⚙️ Giao diện module xử lý hồ sơ hàng loạt (10 người) - Khoảng cách ảnh siêu sát (0.6mm)")
+    st.info("⚙️ Chế độ in hàng loạt đã tối ưu: Đẩy ảnh ra sát lề (Lề 1mm) để xếp vừa khít 7 ảnh 3x4cm trên 1 hàng ngang")
     
     html_code = """<!DOCTYPE html>
 <html lang="vi">
@@ -603,8 +603,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview1" class="preview" alt="Preview 1"><button id="clearBtn1" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_1" value="9" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_1" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_1" value="7" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_1" value="0" min="0" max="28"></div>
                 </div>
             </div>
             <div class="person-box">
@@ -614,8 +614,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview2" class="preview" alt="Preview 2"><button id="clearBtn2" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_2" value="9" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_2" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_2" value="7" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_2" value="0" min="0" max="28"></div>
                 </div>
             </div>
         </div>
@@ -629,8 +629,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput3" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview3" class="preview" alt="Preview 3"><button id="clearBtn3" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_3" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_3" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_3" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_3" value="0" min="0" max="28"></div>
                 </div>
             </div>
             <div class="person-box">
@@ -640,8 +640,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput4" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview4" class="preview" alt="Preview 4"><button id="clearBtn4" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_4" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_4" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_4" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_4" value="0" min="0" max="28"></div>
                 </div>
             </div>
         </div>
@@ -655,8 +655,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput5" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview5" class="preview" alt="Preview 5"><button id="clearBtn5" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_5" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_5" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_5" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_5" value="0" min="0" max="28"></div>
                 </div>
             </div>
             <div class="person-box">
@@ -666,8 +666,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput6" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview6" class="preview" alt="Preview 6"><button id="clearBtn6" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_6" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_6" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_6" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_6" value="0" min="0" max="28"></div>
                 </div>
             </div>
         </div>
@@ -681,8 +681,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput7" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview7" class="preview" alt="Preview 7"><button id="clearBtn7" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_7" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_7" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_7" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_7" value="0" min="0" max="28"></div>
                 </div>
             </div>
             <div class="person-box">
@@ -692,8 +692,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput8" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview8" class="preview" alt="Preview 8"><button id="clearBtn8" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_8" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_8" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_8" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_8" value="0" min="0" max="28"></div>
                 </div>
             </div>
         </div>
@@ -707,8 +707,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput9" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview9" class="preview" alt="Preview 9"><button id="clearBtn9" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_9" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_9" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_9" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_9" value="0" min="0" max="28"></div>
                 </div>
             </div>
             <div class="person-box">
@@ -718,8 +718,8 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                 <input type="file" id="imgInput10" accept="image/png, image/jpeg, image/jpg">
                 <center><div class="img-wrapper"><img id="preview10" class="preview" alt="Preview 10"><button id="clearBtn10" class="clear-btn">✖</button></div></center>
                 <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_10" value="0" min="0" max="24"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_10" value="0" min="0" max="24"></div>
+                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_10" value="0" min="0" max="28"></div>
+                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_10" value="0" min="0" max="28"></div>
                 </div>
             </div>
         </div>
@@ -788,9 +788,11 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             return list;
         }
 
+        // ĐÃ ĐIỀU CHỈNH SÁT LỀ ĐỂ VỪA KHÍT 7 ẢNH/HÀNG
         function buildLayoutData(persons) {
             const a4W = 210, a4H = 297;
-            let gapX = 0.6, gapY = 0.6, marginX = 5, marginY = 3;
+            // Tối ưu lề trái/phải marginX còn 1.0mm và gapX là 0.1mm
+            let gapX = 0.1, gapY = 0.5, marginX = 1.0, marginY = 1.5;
             let pages = [], currentPage = [], curX = marginX, curY = marginY;
             let maxRowHeight = 0;
 
@@ -805,7 +807,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             });
 
             allItems.forEach((item) => {
-                if (curX + item.w > a4W - marginX) {
+                if (curX + item.w > a4W - marginX + 0.1) {
                     curX = marginX;
                     curY += maxRowHeight + gapY;
                     maxRowHeight = 0;
@@ -956,7 +958,6 @@ if input_file:
             except Exception as e: 
                 st.error(f"Không thể xử lý tệp tin đầu vào: {e}")
 
-# Thanh công cụ tương tác nhanh trên đỉnh trang chính
 col_btn1, col_btn2, col_space = st.columns([1.5, 1, 3])
 with col_btn1:
     current_lvl = st.session_state.get('auto_level', 0)
@@ -967,7 +968,6 @@ with col_btn2:
 
 st.divider()
 
-# Phân bố khu vực chức năng (Cột trái: Điều khiển | Cột phải: Xem kết quả)
 col_tools, col_result = st.columns([1.1, 1.2], gap="large")
 
 with col_tools:
@@ -979,7 +979,6 @@ with col_tools:
         if final_crop: st.session_state.base = final_crop
         else: st.error(f"Thông báo hệ thống: {debug_info}")
 
-    # Sử dụng Tabs đã được tối ưu hóa giao diện Modern SaaS
     tab1, tab2, tab3 = st.tabs(["🎨 Ánh Sáng & Sắc Độ", "👩 Thẩm Mỹ Khuôn Mặt", "📐 Bố Cục & Chi Tiết"])
     
     with tab1:
