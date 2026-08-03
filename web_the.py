@@ -417,7 +417,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge((h_c, s_c, v_c)), cv2.COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -449,7 +449,7 @@ def create_pdf(img_person, size_type):
     elif "4x6" in size_type:
         w_mm, h_mm, cols, rows, margin_x, margin_y = 40, 60, 2, 4, 62, 25
     else: 
-        w_mm, h_mm, cols, rows, margin_x, margin_y = 29.5, 39.5, 7, 7, 0.5, 2
+        w_mm, h_mm, cols, rows, margin_x, margin_y = 29.0, 39.0, 7, 7, 1.0, 2.0
 
     for r in range(rows):
         for c in range(cols):
@@ -470,7 +470,7 @@ def create_print_layout_preview(img_person, size_type):
     elif "4x6" in size_type:
         target_w, target_h, rows, cols, start_x, start_y, gap = 472, 708, 4, 2, 743, 263, 50
     else: 
-        target_w, target_h, rows, cols, start_x, start_y, gap = 348, 466, 7, 7, 6, 20, 2
+        target_w, target_h, rows, cols, start_x, start_y, gap = 342, 460, 7, 7, 10, 20, 2
 
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
@@ -499,10 +499,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - XẾP 7 ẢNH/HÀNG CHUẨN)
+# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - XẾP 7 ẢNH/HÀNG CHUẨN KÍCH THƯỚC)
 # ==============================================================================
 if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
-    st.info("⚙️ Chế độ in hàng loạt đã tối ưu kích thước ảnh (29.5mm x 39.5mm) để xếp vừa khít 7 ảnh 3x4 trên 1 hàng A4")
+    st.info("⚙️ Chế độ in hàng loạt chuẩn: Kích thước 29.0mm x 39.0mm giúp xếp chuẩn 7 ảnh 3x4 trên 1 hàng A4")
     
     html_code = """<!DOCTYPE html>
 <html lang="vi">
@@ -575,6 +575,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             position: relative; width: 100%; max-width: 480px; background: white; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin: 0 auto 30px auto; 
             border: 1px solid #ccc; overflow: hidden; border-radius: 4px;
+            box-sizing: border-box;
         }
         .label-text-style {
             position: absolute; width: 100%; text-align: center; color: #333;
@@ -684,32 +685,33 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             return list;
         }
 
-        // TỐI ƯU KÍCH THƯỚC ĐỂ XẾP ĐỦ 7 ẢNH/HÀNG
+        // TỐI ƯU TOÁN TỬ VÀ KÍCH THƯỚC TRÁNH BỊ TRỎI HÀNG
         function buildLayoutData(persons) {
             const a4W = 210, a4H = 297;
-            // Đặt chiều rộng ảnh 3x4 là 29.5mm để 7 ảnh = 206.5mm, lề marginX = 1mm, gapX = 0.3mm => vừa vặn < 210mm
-            let gapX = 0.3, gapY = 0.5, marginX = 1.0, marginY = 1.5;
+            // 7 ảnh * 29.0mm = 203mm, lề marginX = 1mm, gapX = 0.2mm => Tổng = 206.2mm <= 210mm
+            let gapX = 0.2, gapY = 0.5, marginX = 1.0, marginY = 1.5;
             let pages = [], currentPage = [], curX = marginX, curY = marginY;
             let maxRowHeight = 0;
 
             let allItems = [];
             persons.forEach((person) => {
                 for (let i = 0; i < person.qty3x4; i++) {
-                    allItems.push({ data: person.data, type: person.type, w: 29.5, h: 39.5, name: person.name });
+                    allItems.push({ data: person.data, type: person.type, w: 29.0, h: 39.0, name: person.name });
                 }
                 for (let i = 0; i < person.qty4x6; i++) {
-                    allItems.push({ data: person.data, type: person.type, w: 39.5, h: 59.5, name: person.name });
+                    allItems.push({ data: person.data, type: person.type, w: 39.0, h: 59.0, name: person.name });
                 }
             });
 
             allItems.forEach((item) => {
-                if (curX + item.w > a4W - marginX + 0.1) {
+                // Sử dụng toán tử so sánh chính xác để tránh rớt dòng
+                if (Math.round((curX + item.w) * 10) > Math.round((a4W - marginX) * 10)) {
                     curX = marginX;
                     curY += maxRowHeight + gapY;
                     maxRowHeight = 0;
                 }
 
-                if (curY + item.h > a4H - marginY) {
+                if (Math.round((curY + item.h) * 10) > Math.round((a4H - marginY) * 10)) {
                     pages.push(currentPage);
                     currentPage = [];
                     curX = marginX;
@@ -743,7 +745,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                     let pTop = (img.y / 297) * 100 + '%';
                     let pWidth = (img.w / 210) * 100 + '%';
                     let pHeight = (img.h / 297) * 100 + '%';
-                    pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
+                    pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; box-sizing: border-box;">`;
                     if (img.name) {
                         let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
                         let labelFontSize = (img.w < 35) ? '8px' : '9px';
