@@ -31,7 +31,6 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Tổng thể & Nền */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     
     html, body, [data-testid="stAppViewContainer"] {
@@ -39,13 +38,11 @@ st.markdown("""
         background-color: #f8fafc;
     }
     
-    /* Thanh Sidebar Chuyên Nghiệp */
     [data-testid="stSidebar"] {
         background-color: #ffffff !important;
         border-right: 1px solid #e2e8f0;
     }
     
-    /* Tiêu đề chính kiểu Saas */
     .brand-container {
         text-align: center;
         padding: 20px 10px;
@@ -68,7 +65,6 @@ st.markdown("""
         font-weight: 400;
     }
     
-    /* Hộp chứa ảnh kết quả kết hợp đổ bóng mượt */
     .image-container {
         border: none;
         padding: 20px;
@@ -80,7 +76,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
     
-    /* Thiết kế lại các Tab của Streamlit */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: #f1f5f9;
@@ -107,7 +102,6 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
     
-    /* Nút bấm đồng bộ */
     div[data-testid="stButton"] > button {
         border-radius: 12px !important;
         font-weight: 600 !important;
@@ -115,7 +109,6 @@ st.markdown("""
         transition: all 0.2s ease !important;
     }
     
-    /* Định dạng vùng thông báo bổ sung */
     .premium-card {
         background: #ffffff;
         padding: 20px;
@@ -424,7 +417,7 @@ def apply_advanced_effects(base_img, params):
         h_c, s_c, v_c = cv2.split(hsv)
         s_c = cv2.add(s_c, int(params['makeup'] * 1.5))
         v_c = cv2.add(v_c, int(params['makeup'] * 0.5))
-        img_bgr = cv2.cvtColor(cv2.merge([h_c, s_c, v_c]), cv2.COLOR_HSV2BGR)
+        img_bgr = cv2.cvtColor(cv2.merge((h_c, s_c, v_c)), cv2.COLOR_HSV2BGR)
     if params['blacks'] > 0 or params['whites'] > 0:
         img_bgr = adjust_levels(img_bgr, params['blacks'], params['whites'])
     if params['clarity'] > 0:
@@ -456,11 +449,11 @@ def create_pdf(img_person, size_type):
     elif "4x6" in size_type:
         w_mm, h_mm, cols, rows, margin_x, margin_y = 40, 60, 2, 4, 62, 25
     else: 
-        w_mm, h_mm, cols, rows, margin_x, margin_y = 30, 40, 3, 3, 5, 10
+        w_mm, h_mm, cols, rows, margin_x, margin_y = 29.5, 39.5, 7, 7, 0.5, 2
 
     for r in range(rows):
         for c in range(cols):
-            gap = 4 if "4x6" in size_type else 2
+            gap = 4 if "4x6" in size_type else 0.2
             pdf.image(temp_img_path, x=margin_x + c * (w_mm + gap), y=margin_y + r * (h_mm + gap), w=w_mm, h=h_mm)
     return bytes(pdf.output())
 
@@ -477,7 +470,7 @@ def create_print_layout_preview(img_person, size_type):
     elif "4x6" in size_type:
         target_w, target_h, rows, cols, start_x, start_y, gap = 472, 708, 4, 2, 743, 263, 50
     else: 
-        target_w, target_h, rows, cols, start_x, start_y, gap = 354, 472, 3, 3, 80, 120, 40
+        target_w, target_h, rows, cols, start_x, start_y, gap = 348, 466, 7, 7, 6, 20, 2
 
     img_resized = img_person.resize((target_w, target_h), Image.Resampling.LANCZOS)
     for r in range(rows):
@@ -506,10 +499,10 @@ with st.sidebar:
     st.markdown("---")
 
 # ==============================================================================
-# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - SÁT LỀ TỐI ĐA 7 ẢNH/HÀNG)
+# CHẾ ĐỘ SỐ LƯỢNG LỚN (10 NGƯỜI - XẾP 7 ẢNH/HÀNG CHUẨN)
 # ==============================================================================
 if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
-    st.info("⚙️ Chế độ in hàng loạt đã tối ưu: Đẩy ảnh ra sát lề (Lề 1mm) để xếp vừa khít 7 ảnh 3x4cm trên 1 hàng ngang")
+    st.info("⚙️ Chế độ in hàng loạt đã tối ưu kích thước ảnh (29.5mm x 39.5mm) để xếp vừa khít 7 ảnh 3x4 trên 1 hàng A4")
     
     html_code = """<!DOCTYPE html>
 <html lang="vi">
@@ -594,135 +587,38 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
     <div class="container">
         <h2>HỆ THỐNG XẾP IN HỒ SƠ CAO CẤP SMART STUDIO (10 NGƯỜI)</h2>
         
-        <!-- Hàng 1: Người 1 & 2 -->
-        <div class="upload-group">
-            <div class="person-box">
-                <h4>👤 Người thứ 1</h4>
-                <input type="text" id="name1" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput1" class="custom-file-upload" id="labelInput1">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput1" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview1" class="preview" alt="Preview 1"><button id="clearBtn1" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_1" value="7" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_1" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-            <div class="person-box">
-                <h4>👤 Người thứ 2</h4>
-                <input type="text" id="name2" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput2" class="custom-file-upload" id="labelInput2">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput2" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview2" class="preview" alt="Preview 2"><button id="clearBtn2" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_2" value="7" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_2" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Hàng 2: Người 3 & 4 -->
-        <div class="upload-group">
-            <div class="person-box">
-                <h4>👤 Người thứ 3</h4>
-                <input type="text" id="name3" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput3" class="custom-file-upload" id="labelInput3">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput3" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview3" class="preview" alt="Preview 3"><button id="clearBtn3" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_3" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_3" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-            <div class="person-box">
-                <h4>👤 Người thứ 4</h4>
-                <input type="text" id="name4" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput4" class="custom-file-upload" id="labelInput4">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput4" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview4" class="preview" alt="Preview 4"><button id="clearBtn4" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_4" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_4" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hàng 3: Người 5 & 6 -->
-        <div class="upload-group">
-            <div class="person-box">
-                <h4>👤 Người thứ 5</h4>
-                <input type="text" id="name5" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput5" class="custom-file-upload" id="labelInput5">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput5" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview5" class="preview" alt="Preview 5"><button id="clearBtn5" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_5" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_5" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-            <div class="person-box">
-                <h4>👤 Người thứ 6</h4>
-                <input type="text" id="name6" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput6" class="custom-file-upload" id="labelInput6">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput6" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview6" class="preview" alt="Preview 6"><button id="clearBtn6" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_6" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_6" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hàng 4: Người 7 & 8 -->
-        <div class="upload-group">
-            <div class="person-box">
-                <h4>👤 Người thứ 7</h4>
-                <input type="text" id="name7" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput7" class="custom-file-upload" id="labelInput7">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput7" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview7" class="preview" alt="Preview 7"><button id="clearBtn7" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_7" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_7" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-            <div class="person-box">
-                <h4>👤 Người thứ 8</h4>
-                <input type="text" id="name8" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput8" class="custom-file-upload" id="labelInput8">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput8" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview8" class="preview" alt="Preview 8"><button id="clearBtn8" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_8" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_8" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hàng 5: Người 9 & 10 -->
-        <div class="upload-group">
-            <div class="person-box">
-                <h4>👤 Người thứ 9</h4>
-                <input type="text" id="name9" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput9" class="custom-file-upload" id="labelInput9">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput9" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview9" class="preview" alt="Preview 9"><button id="clearBtn9" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_9" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_9" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-            <div class="person-box">
-                <h4>👤 Người thứ 10</h4>
-                <input type="text" id="name10" class="name-input" placeholder="Nhập tên học viên...">
-                <label for="imgInput10" class="custom-file-upload" id="labelInput10">📁 Chọn Ảnh...</label>
-                <input type="file" id="imgInput10" accept="image/png, image/jpeg, image/jpg">
-                <center><div class="img-wrapper"><img id="preview10" class="preview" alt="Preview 10"><button id="clearBtn10" class="clear-btn">✖</button></div></center>
-                <div class="qty-area">
-                    <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_10" value="0" min="0" max="28"></div>
-                    <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_10" value="0" min="0" max="28"></div>
-                </div>
-            </div>
-        </div>
+        <!-- Hàng 1 đến 5 -->
+        <script>
+            let htmlInputs = '';
+            for(let i = 1; i <= 10; i+=2) {
+                htmlInputs += `
+                <div class="upload-group">
+                    <div class="person-box">
+                        <h4>👤 Người thứ ${i}</h4>
+                        <input type="text" id="name${i}" class="name-input" placeholder="Nhập tên học viên...">
+                        <label for="imgInput${i}" class="custom-file-upload" id="labelInput${i}">📁 Chọn Ảnh...</label>
+                        <input type="file" id="imgInput${i}" accept="image/png, image/jpeg, image/jpg">
+                        <center><div class="img-wrapper"><img id="preview${i}" class="preview" alt="Preview ${i}"><button id="clearBtn${i}" class="clear-btn">✖</button></div></center>
+                        <div class="qty-area">
+                            <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_${i}" value="${i <= 2 ? 7 : 0}" min="0" max="28"></div>
+                            <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_${i}" value="0" min="0" max="28"></div>
+                        </div>
+                    </div>
+                    <div class="person-box">
+                        <h4>👤 Người thứ ${i+1}</h4>
+                        <input type="text" id="name${i+1}" class="name-input" placeholder="Nhập tên học viên...">
+                        <label for="imgInput${i+1}" class="custom-file-upload" id="labelInput${i+1}">📁 Chọn Ảnh...</label>
+                        <input type="file" id="imgInput${i+1}" accept="image/png, image/jpeg, image/jpg">
+                        <center><div class="img-wrapper"><img id="preview${i+1}" class="preview" alt="Preview ${i+1}"><button id="clearBtn${i+1}" class="clear-btn">✖</button></div></center>
+                        <div class="qty-area">
+                            <div class="qty-row"><span><span class="badge bg-3x4">3x4</span> SL:</span><input type="number" id="qty3x4_${i+1}" value="${i <= 2 ? 7 : 0}" min="0" max="28"></div>
+                            <div class="qty-row"><span><span class="badge bg-4x6">4x6</span> SL:</span><input type="number" id="qty4x6_${i+1}" value="0" min="0" max="28"></div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            document.write(htmlInputs);
+        </script>
 
         <div class="btn-group">
             <button id="previewBtn" class="btn">👁️ Xem Trước Bản Xếp</button>
@@ -788,21 +684,21 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
             return list;
         }
 
-        // ĐÃ ĐIỀU CHỈNH SÁT LỀ ĐỂ VỪA KHÍT 7 ẢNH/HÀNG
+        // TỐI ƯU KÍCH THƯỚC ĐỂ XẾP ĐỦ 7 ẢNH/HÀNG
         function buildLayoutData(persons) {
             const a4W = 210, a4H = 297;
-            // Tối ưu lề trái/phải marginX còn 1.0mm và gapX là 0.1mm
-            let gapX = 0.1, gapY = 0.5, marginX = 1.0, marginY = 1.5;
+            // Đặt chiều rộng ảnh 3x4 là 29.5mm để 7 ảnh = 206.5mm, lề marginX = 1mm, gapX = 0.3mm => vừa vặn < 210mm
+            let gapX = 0.3, gapY = 0.5, marginX = 1.0, marginY = 1.5;
             let pages = [], currentPage = [], curX = marginX, curY = marginY;
             let maxRowHeight = 0;
 
             let allItems = [];
             persons.forEach((person) => {
                 for (let i = 0; i < person.qty3x4; i++) {
-                    allItems.push({ data: person.data, type: person.type, w: 30, h: 40, name: person.name });
+                    allItems.push({ data: person.data, type: person.type, w: 29.5, h: 39.5, name: person.name });
                 }
                 for (let i = 0; i < person.qty4x6; i++) {
-                    allItems.push({ data: person.data, type: person.type, w: 40, h: 60, name: person.name });
+                    allItems.push({ data: person.data, type: person.type, w: 39.5, h: 59.5, name: person.name });
                 }
             });
 
@@ -850,7 +746,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                     pagesHtml += `<img src="${img.data}" style="position: absolute; left: ${pLeft}; top: ${pTop}; width: ${pWidth}; height: ${pHeight}; object-fit: cover; border: 1px solid #E5E5E5; box-sizing: border-box;">`;
                     if (img.name) {
                         let labelTop = ((img.y + img.h - 3.2) / 297) * 100 + '%';
-                        let labelFontSize = (img.w === 30) ? '8px' : '9px';
+                        let labelFontSize = (img.w < 35) ? '8px' : '9px';
                         pagesHtml += `<div class="label-text-style" style="left: ${pLeft}; top: ${labelTop}; font-size: ${labelFontSize}; background: rgba(255,255,255,0.8); height:13px; line-height:13px;">${img.name}</div>`;
                     }
                 });
@@ -874,7 +770,7 @@ if app_mode == "👥 Ghép In Hàng Loạt (Số lượng lớn)":
                     doc.setDrawColor(225, 225, 225); doc.setLineWidth(0.08); doc.rect(img.x, img.y, img.w, img.h, 'S');
                     if (img.name) {
                         doc.setFillColor(255, 255, 255); doc.rect(img.x + 0.2, img.y + img.h - 3.0, img.w - 0.4, 2.8, 'F');
-                        doc.setTextColor(60, 60, 60); let fSize = (img.w === 30) ? 5.5 : 6.5;
+                        doc.setTextColor(60, 60, 60); let fSize = (img.w < 35) ? 5.5 : 6.5;
                         doc.setFontSize(fSize); doc.setFont("Helvetica", "bold");
                         doc.text(img.name, img.x + (img.w / 2), img.y + img.h - 0.8, { align: 'center' });
                     }
